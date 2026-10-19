@@ -14,8 +14,8 @@ import { useNotification } from '../../context/NotificationContext';
 import { Role } from '../../types';
 
 export const SignIn: React.FC = () => {
-  const [email, setEmail] = useState('alex.morgan@apexhorizon.com');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('sarah.admin@apexcorp.com');
+  const [password, setPassword] = useState('SecurePassword123!');
   const [selectedRole, setSelectedRole] = useState<Role>('Company Admin');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -23,24 +23,28 @@ export const SignIn: React.FC = () => {
   const { notify } = useNotification();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    setTimeout(() => {
-      login(email, password, selectedRole);
-      notify(`Welcome back! Signed in as ${selectedRole}`, 'success');
-      setIsLoading(false);
+    const res = await login(email, password, selectedRole);
+    if (res.success) {
+      notify(res.message || `Welcome back! Signed in as ${selectedRole}`, 'success');
       navigate('/dashboard');
-    }, 600);
+    } else {
+      notify(res.message || 'Authentication failed. Please check your credentials.', 'error');
+    }
+    setIsLoading(false);
   };
 
   const handleDemoFill = (role: Role) => {
     if (role === 'Company Admin') {
-      setEmail('alex.morgan@apexhorizon.com');
+      setEmail('sarah.admin@apexcorp.com');
+      setPassword('SecurePassword123!');
       setSelectedRole('Company Admin');
     } else {
-      setEmail('david.chen@apexhorizon.com');
+      setEmail('sarah.admin@apexcorp.com');
+      setPassword('SecurePassword123!');
       setSelectedRole('Employee');
     }
     notify(`Prefilled credentials for ${role}`, 'info');

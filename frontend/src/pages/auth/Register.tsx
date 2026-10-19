@@ -32,7 +32,7 @@ export const Register: React.FC = () => {
     ? `TNT-${companyName.trim().substring(0, 4).toUpperCase()}-9402`
     : 'TNT-CORP-9402';
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!companyName.trim()) {
       notify('Please enter your Company Name to provision your Tenant ID', 'warning');
@@ -41,18 +41,21 @@ export const Register: React.FC = () => {
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      register({
-        name,
-        email,
-        password,
-        companyName,
-        role,
-      });
-      notify(`Tenant workspace provisioned for ${companyName}! Welcome aboard.`, 'success');
-      setIsLoading(false);
+    const res = await register({
+      name,
+      email,
+      password,
+      companyName,
+      role,
+    });
+
+    if (res.success) {
+      notify(res.message || `Tenant workspace provisioned for ${companyName}! Welcome aboard.`, 'success');
       navigate('/dashboard');
-    }, 800);
+    } else {
+      notify(res.message || 'Registration failed. Please check your details.', 'error');
+    }
+    setIsLoading(false);
   };
 
   return (
