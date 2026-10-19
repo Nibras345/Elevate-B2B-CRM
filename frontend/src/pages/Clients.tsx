@@ -1,35 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users,
   Search,
   Plus,
-  Filter,
-  MoreVertical,
   Mail,
   Phone,
-  Building,
-  DollarSign,
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   Edit,
   Trash2,
-  FileText,
   Clock,
-  ExternalLink,
-  ShieldAlert,
-  CheckCircle2,
   Receipt,
 } from 'lucide-react';
 import { initialClients } from '../data/mockData';
-import { Badge } from '../components/common/Badge';
+import { Badge, BadgeVariant } from '../components/common/Badge';
 import { Drawer } from '../components/common/Drawer';
 import { Modal } from '../components/common/Modal';
 import { useNotification } from '../context/NotificationContext';
+import { Client, ClientStatus } from '../types';
 
-export const Clients = () => {
-  const [clients, setClients] = useState(initialClients);
+export const Clients: React.FC = () => {
+  const [clients, setClients] = useState<Client[]>(initialClients);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState('ltv-desc'); // ltv-desc, ltv-asc, name-asc
@@ -44,21 +36,21 @@ export const Clients = () => {
     email: '',
     phone: '',
     ltv: '',
-    status: 'Active',
+    status: 'Active' as ClientStatus,
     industry: 'Enterprise Software',
     address: '',
     city: '',
     country: 'United States',
   });
-  const [formErrors, setFormErrors] = useState({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Client History Drawer
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
-  const [selectedClientForHistory, setSelectedClientForHistory] = useState(null);
+  const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
 
   // Edit Client Modal
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [clientToEdit, setClientToEdit] = useState(null);
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
 
   const { notify } = useNotification();
   const navigate = useNavigate();
@@ -93,7 +85,7 @@ export const Clients = () => {
 
   // Validation
   const validateForm = () => {
-    const errors = {};
+    const errors: Record<string, string> = {};
     if (!newClientForm.name.trim()) errors.name = 'Client name is required';
     if (!newClientForm.company.trim()) errors.company = 'Company name is required';
     if (!newClientForm.email.trim() || !newClientForm.email.includes('@')) {
@@ -104,14 +96,14 @@ export const Clients = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleCreateClient = (e) => {
+  const handleCreateClient = (e: FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
       notify('Please resolve highlighted form validation errors', 'warning');
       return;
     }
 
-    const createdClient = {
+    const createdClient: Client = {
       id: `cli-${Date.now()}`,
       name: newClientForm.name,
       company: newClientForm.company,
@@ -146,8 +138,9 @@ export const Clients = () => {
     notify(`Client ${createdClient.name} (${createdClient.company}) added successfully`, 'success');
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = (e: FormEvent) => {
     e.preventDefault();
+    if (!clientToEdit) return;
     setClients((prev) =>
       prev.map((c) => (c.id === clientToEdit.id ? clientToEdit : c))
     );
@@ -155,22 +148,22 @@ export const Clients = () => {
     notify(`Updated client record for ${clientToEdit.company}`, 'success');
   };
 
-  const handleDeleteClient = (clientId, companyName) => {
+  const handleDeleteClient = (clientId: string, companyName: string) => {
     setClients((prev) => prev.filter((c) => c.id !== clientId));
     notify(`Deleted client record for ${companyName}`, 'info');
   };
 
-  const openHistoryDrawer = (client) => {
+  const openHistoryDrawer = (client: Client) => {
     setSelectedClientForHistory(client);
     setIsHistoryDrawerOpen(true);
   };
 
-  const openEditModal = (client) => {
+  const openEditModal = (client: Client) => {
     setClientToEdit({ ...client });
     setIsEditModalOpen(true);
   };
 
-  const handleGenerateInvoiceShortcut = (client) => {
+  const handleGenerateInvoiceShortcut = (client: Client) => {
     notify(`Redirecting to Invoices for ${client.company}`, 'info');
     navigate(`/invoices?clientId=${client.id}`);
   };
@@ -230,7 +223,7 @@ export const Clients = () => {
                   setStatusFilter(status);
                   setCurrentPage(1);
                 }}
-                className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                   statusFilter === status
                     ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -275,7 +268,7 @@ export const Clients = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {paginatedClients.length > 0 ? (
                 paginatedClients.map((client) => {
-                  let statusBadge = 'neutral';
+                  let statusBadge: BadgeVariant = 'neutral';
                   if (client.status === 'Active') statusBadge = 'success';
                   if (client.status === 'Pending') statusBadge = 'warning';
 
@@ -358,7 +351,7 @@ export const Clients = () => {
                           <button
                             onClick={() => openHistoryDrawer(client)}
                             title="View History & Ledger"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                           >
                             <Clock className="w-4 h-4" />
                           </button>
@@ -366,7 +359,7 @@ export const Clients = () => {
                           <button
                             onClick={() => handleGenerateInvoiceShortcut(client)}
                             title="Generate Invoice for Client"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                           >
                             <Receipt className="w-4 h-4" />
                           </button>
@@ -374,7 +367,7 @@ export const Clients = () => {
                           <button
                             onClick={() => openEditModal(client)}
                             title="Edit Client Information"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -382,7 +375,7 @@ export const Clients = () => {
                           <button
                             onClick={() => handleDeleteClient(client.id, client.company)}
                             title="Delete Client"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -423,7 +416,7 @@ export const Clients = () => {
               <button
                 key={page}
                 onClick={() => setCurrentPage(page)}
-                className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${
+                className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   currentPage === page
                     ? 'bg-brand-600 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -551,7 +544,7 @@ export const Clients = () => {
               </label>
               <select
                 value={newClientForm.status}
-                onChange={(e) => setNewClientForm({ ...newClientForm, status: e.target.value })}
+                onChange={(e) => setNewClientForm({ ...newClientForm, status: e.target.value as ClientStatus })}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
               >
                 <option value="Active">Active</option>
@@ -627,13 +620,13 @@ export const Clients = () => {
             <button
               type="button"
               onClick={() => setIsAddDrawerOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20"
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
             >
               Provision Client
             </button>
@@ -755,7 +748,7 @@ export const Clients = () => {
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
                 onClick={() => handleGenerateInvoiceShortcut(selectedClientForHistory)}
-                className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20"
+                className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer"
               >
                 <Receipt className="w-4 h-4" />
                 <span>Issue New Invoice</span>
@@ -849,7 +842,7 @@ export const Clients = () => {
                 </label>
                 <select
                   value={clientToEdit.status}
-                  onChange={(e) => setClientToEdit({ ...clientToEdit, status: e.target.value })}
+                  onChange={(e) => setClientToEdit({ ...clientToEdit, status: e.target.value as ClientStatus })}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
                 >
                   <option value="Active">Active</option>
@@ -863,13 +856,13 @@ export const Clients = () => {
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20"
+                className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
               >
                 Save Client Record
               </button>

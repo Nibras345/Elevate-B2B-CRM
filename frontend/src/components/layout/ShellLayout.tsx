@@ -3,9 +3,16 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { Modal } from '../common/Modal';
-import { Search, ArrowRight, KanbanSquare, Users, Receipt, Settings, Sparkles } from 'lucide-react';
+import { Search, ArrowRight, KanbanSquare, Users, Receipt, Settings, LucideIcon } from 'lucide-react';
 
-export const ShellLayout = () => {
+interface QuickLink {
+  title: string;
+  category: string;
+  path: string;
+  icon: LucideIcon;
+}
+
+export const ShellLayout: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -14,7 +21,7 @@ export const ShellLayout = () => {
 
   // Keyboard shortcut listener for Cmd+K / Ctrl+K
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsSearchOpen((prev) => !prev);
@@ -24,7 +31,7 @@ export const ShellLayout = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const quickLinks = [
+  const quickLinks: QuickLink[] = [
     { title: 'Pipeline Kanban Board', category: 'Pages', path: '/leads', icon: KanbanSquare },
     { title: 'Client Directory & Database', category: 'Pages', path: '/clients', icon: Users },
     { title: 'Invoicing & PDF Generator', category: 'Pages', path: '/invoices', icon: Receipt },
@@ -36,7 +43,7 @@ export const ShellLayout = () => {
     item.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSelectLink = (path) => {
+  const handleSelectLink = (path: string) => {
     navigate(path);
     setIsSearchOpen(false);
     setSearchQuery('');
@@ -96,7 +103,7 @@ export const ShellLayout = () => {
                   <button
                     key={item.path}
                     onClick={() => handleSelectLink(item.path)}
-                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors group"
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors group cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <div className="p-2 rounded-lg bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400 group-hover:bg-brand-500 group-hover:text-white transition-colors">

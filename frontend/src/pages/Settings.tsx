@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   User,
@@ -7,16 +7,9 @@ import {
   Shield,
   Key,
   Bell,
-  Mail,
   Camera,
-  CheckCircle2,
-  AlertTriangle,
   Plus,
   Trash2,
-  Sparkles,
-  Lock,
-  Globe,
-  DollarSign,
   ShieldAlert,
 } from 'lucide-react';
 import { initialTeamMembers } from '../data/mockData';
@@ -24,8 +17,9 @@ import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
+import { TeamMember, Role } from '../types';
 
-export const Settings = () => {
+export const Settings: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentTabFromUrl = searchParams.get('tab') || 'profile';
 
@@ -42,7 +36,7 @@ export const Settings = () => {
     }
   }, [searchParams]);
 
-  const handleTabChange = (tab) => {
+  const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setSearchParams({ tab });
   };
@@ -77,18 +71,18 @@ export const Settings = () => {
   });
 
   // Team Members State
-  const [team, setTeam] = useState(initialTeamMembers);
+  const [team, setTeam] = useState<TeamMember[]>(initialTeamMembers);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     name: '',
     email: '',
-    role: 'Sales Agent',
+    role: 'Sales Agent' as Role,
     department: 'Enterprise Sales',
   });
 
   // Security toggles
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
-  const [emailAlerts, setEmailAlerts] = useState({
+  const [emailAlerts, setEmailAlerts] = useState<Record<string, boolean>>({
     dealWon: true,
     invoicePaid: true,
     newLeadAssigned: true,
@@ -98,7 +92,7 @@ export const Settings = () => {
   const isAdmin = user.role === 'Company Admin';
 
   // Save Profile
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = (e: FormEvent) => {
     e.preventDefault();
     updateProfile({
       name: profileForm.name,
@@ -110,7 +104,7 @@ export const Settings = () => {
   };
 
   // Change Password
-  const handleChangePassword = (e) => {
+  const handleChangePassword = (e: FormEvent) => {
     e.preventDefault();
     if (passForm.newPassword !== passForm.confirmPassword) {
       notify('New passwords do not match', 'error');
@@ -121,7 +115,7 @@ export const Settings = () => {
   };
 
   // Save Company Settings (Admin only)
-  const handleSaveCompany = (e) => {
+  const handleSaveCompany = (e: FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
       notify('Access Denied: Only Company Admins can edit tenant configurations', 'error');
@@ -132,9 +126,9 @@ export const Settings = () => {
   };
 
   // Invite Team Member
-  const handleInviteUser = (e) => {
+  const handleInviteUser = (e: FormEvent) => {
     e.preventDefault();
-    const newMember = {
+    const newMember: TeamMember = {
       id: `team-${Date.now()}`,
       name: inviteForm.name,
       email: inviteForm.email,
@@ -153,7 +147,7 @@ export const Settings = () => {
   };
 
   // Remove team member
-  const handleRemoveMember = (id, name) => {
+  const handleRemoveMember = (id: string, name: string) => {
     setTeam(prev => prev.filter(m => m.id !== id));
     notify(`Removed ${name} from tenant workspace`, 'info');
   };
@@ -233,7 +227,7 @@ export const Settings = () => {
                     notify('Avatar image updated', 'info');
                   }
                 }}
-                className="absolute -bottom-2 -right-2 p-2 bg-brand-600 text-white rounded-xl shadow-md hover:bg-brand-500 transition-colors"
+                className="absolute -bottom-2 -right-2 p-2 bg-brand-600 text-white rounded-xl shadow-md hover:bg-brand-500 transition-colors cursor-pointer"
                 title="Change Avatar"
               >
                 <Camera className="w-4 h-4" />
@@ -331,7 +325,7 @@ export const Settings = () => {
                 <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20"
+                    className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer"
                   >
                     Save Changes
                   </button>
@@ -394,7 +388,7 @@ export const Settings = () => {
                 <div className="flex justify-end pt-2">
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white dark:bg-slate-700 dark:hover:bg-slate-600 rounded-xl text-xs font-semibold"
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white dark:bg-slate-700 dark:hover:bg-slate-600 rounded-xl text-xs font-semibold cursor-pointer"
                   >
                     Update Password
                   </button>
@@ -549,7 +543,7 @@ export const Settings = () => {
                 <button
                   type="submit"
                   disabled={!isAdmin}
-                  className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 disabled:opacity-50"
+                  className="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 disabled:opacity-50 cursor-pointer"
                 >
                   Save Company Preferences
                 </button>
@@ -657,7 +651,7 @@ export const Settings = () => {
                         {member.id !== 'team-1' ? (
                           <button
                             onClick={() => handleRemoveMember(member.id, member.name)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                             title="Remove Member"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -716,7 +710,7 @@ export const Settings = () => {
                 </label>
                 <select
                   value={inviteForm.role}
-                  onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
+                  onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value as Role })}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
                 >
                   <option value="Sales Agent">Sales Agent (Pipeline & Deals)</option>
@@ -741,13 +735,13 @@ export const Settings = () => {
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20"
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer"
                 >
                   Send Invitation
                 </button>

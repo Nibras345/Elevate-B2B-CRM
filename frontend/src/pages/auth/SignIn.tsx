@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Building2,
@@ -8,22 +8,22 @@ import {
   ShieldCheck,
   CheckCircle2,
   Sparkles,
-  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
+import { Role } from '../../types';
 
-export const SignIn = () => {
+export const SignIn: React.FC = () => {
   const [email, setEmail] = useState('alex.morgan@apexhorizon.com');
   const [password, setPassword] = useState('••••••••••••');
-  const [selectedRole, setSelectedRole] = useState('Company Admin');
+  const [selectedRole, setSelectedRole] = useState<Role>('Company Admin');
   const [isLoading, setIsLoading] = useState(false);
 
   const { login } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
@@ -35,7 +35,7 @@ export const SignIn = () => {
     }, 600);
   };
 
-  const handleDemoFill = (role) => {
+  const handleDemoFill = (role: Role) => {
     if (role === 'Company Admin') {
       setEmail('alex.morgan@apexhorizon.com');
       setSelectedRole('Company Admin');
@@ -127,7 +127,7 @@ export const SignIn = () => {
               <button
                 type="button"
                 onClick={() => handleDemoFill('Company Admin')}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   selectedRole === 'Company Admin'
                     ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -138,7 +138,7 @@ export const SignIn = () => {
               <button
                 type="button"
                 onClick={() => handleDemoFill('Employee')}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   selectedRole === 'Employee'
                     ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -179,7 +179,7 @@ export const SignIn = () => {
                     e.preventDefault();
                     notify('Password reset instructions sent to registered email', 'info');
                   }}
-                  className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
+                  className="text-xs text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
                 >
                   Forgot password?
                 </a>

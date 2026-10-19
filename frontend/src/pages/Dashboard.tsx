@@ -2,33 +2,29 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
-  TrendingDown,
   DollarSign,
   Users,
   Award,
   Percent,
-  Calendar,
   Download,
   Plus,
   ArrowUpRight,
-  Filter,
-  CheckCircle2,
-  Receipt,
   KanbanSquare,
-  Sparkles,
+  Receipt,
+  LucideIcon,
 } from 'lucide-react';
 import { dashboardAnalytics } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 
-export const Dashboard = () => {
+export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const { notify } = useNotification();
   const navigate = useNavigate();
 
   const [timeRange, setTimeRange] = useState('This Month');
   const [activeActivityTab, setActiveActivityTab] = useState('all');
-  const [hoveredMonthIndex, setHoveredMonthIndex] = useState(null);
+  const [hoveredMonthIndex, setHoveredMonthIndex] = useState<number | null>(null);
 
   const kpis = dashboardAnalytics.kpis;
   const monthlyData = dashboardAnalytics.monthlyRevenue;
@@ -100,7 +96,7 @@ export const Dashboard = () => {
 
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-2xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-2xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
             <span className="hidden sm:inline">Export</span>
@@ -119,26 +115,22 @@ export const Dashboard = () => {
       {/* 4 Glowing KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi) => {
-          let icon = DollarSign;
+          let icon: LucideIcon = DollarSign;
           let glowClass = 'hover:border-indigo-500/50 hover:shadow-glow-indigo';
           let iconBg = 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400';
-          let borderGlow = 'border-indigo-500/20';
 
           if (kpi.id === 'kpi-leads') {
             icon = Users;
             glowClass = 'hover:border-emerald-500/50 hover:shadow-glow-emerald';
             iconBg = 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400';
-            borderGlow = 'border-emerald-500/20';
           } else if (kpi.id === 'kpi-deals') {
             icon = Award;
             glowClass = 'hover:border-amber-500/50 hover:shadow-glow-amber';
             iconBg = 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400';
-            borderGlow = 'border-amber-500/20';
           } else if (kpi.id === 'kpi-conv') {
             icon = Percent;
             glowClass = 'hover:border-purple-500/50 hover:shadow-glow-indigo';
             iconBg = 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400';
-            borderGlow = 'border-purple-500/20';
           }
 
           const IconComponent = icon;
@@ -325,7 +317,7 @@ export const Dashboard = () => {
               </h3>
               <button
                 onClick={() => navigate('/leads')}
-                className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-semibold flex items-center gap-1"
+                className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <span>Pipeline</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -396,7 +388,7 @@ export const Dashboard = () => {
                 <button
                   key={tab}
                   onClick={() => setActiveActivityTab(tab)}
-                  className={`px-3 py-1 rounded-lg capitalize font-medium transition-all ${
+                  className={`px-3 py-1 rounded-lg capitalize font-medium transition-all cursor-pointer ${
                     activeActivityTab === tab
                       ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -473,7 +465,7 @@ export const Dashboard = () => {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => navigate('/leads')}
-                className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand-500 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 text-left transition-all"
+                className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand-500 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 text-left transition-all cursor-pointer"
               >
                 <KanbanSquare className="w-5 h-5 text-brand-500 mb-1" />
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Kanban Board</span>
@@ -482,7 +474,7 @@ export const Dashboard = () => {
 
               <button
                 onClick={() => navigate('/invoices')}
-                className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand-500 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 text-left transition-all"
+                className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-brand-500 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 text-left transition-all cursor-pointer"
               >
                 <Receipt className="w-5 h-5 text-brand-500 mb-1" />
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Create Invoice</span>

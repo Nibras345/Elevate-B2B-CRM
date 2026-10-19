@@ -1,20 +1,39 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { UserProfile, TenantSettings, Role } from '../types';
 
-const AuthContext = createContext();
+interface RegisterParams {
+  name: string;
+  email: string;
+  password?: string;
+  companyName: string;
+  role?: Role;
+}
 
-const DEFAULT_USER = {
+interface AuthContextType {
+  user: UserProfile;
+  tenantSettings: TenantSettings;
+  isAuthenticated: boolean;
+  login: (email?: string, password?: string, role?: Role) => { success: boolean };
+  register: (params: RegisterParams) => { success: boolean };
+  logout: () => void;
+  switchRole: (newRole: Role) => void;
+  updateProfile: (data: Partial<UserProfile>) => void;
+  updateTenant: (data: Partial<TenantSettings>) => void;
+}
+
+const DEFAULT_USER: UserProfile = {
   id: 'usr_001',
   name: 'Alex Morgan',
   email: 'alex.morgan@apexhorizon.com',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  role: 'Company Admin', // 'Company Admin' or 'Employee'
+  role: 'Company Admin',
   companyName: 'Apex Horizon Technologies',
   tenantId: 'TNT-APEX-8921',
   department: 'Executive Sales & Operations',
   joinedDate: 'Jan 2024',
 };
 
-const DEFAULT_TENANT_SETTINGS = {
+const DEFAULT_TENANT_SETTINGS: TenantSettings = {
   companyName: 'Apex Horizon Technologies',
   tenantId: 'TNT-APEX-8921',
   logoUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80',
@@ -26,18 +45,20 @@ const DEFAULT_TENANT_SETTINGS = {
   website: 'https://apexhorizon.com',
 };
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('nexcrm_user');
     return saved ? JSON.parse(saved) : DEFAULT_USER;
   });
 
-  const [tenantSettings, setTenantSettings] = useState(() => {
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings>(() => {
     const saved = localStorage.getItem('nexcrm_tenant');
     return saved ? JSON.parse(saved) : DEFAULT_TENANT_SETTINGS;
   });
 
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const saved = localStorage.getItem('nexcrm_auth');
     return saved ? JSON.parse(saved) : true;
   });
@@ -54,8 +75,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('nexcrm_auth', JSON.stringify(isAuthenticated));
   }, [isAuthenticated]);
 
-  const login = (email, password, role = 'Company Admin') => {
-    const updatedUser = {
+  const login = (email?: string, _password?: string, role: Role = 'Company Admin') => {
+    const updatedUser: UserProfile = {
       ...user,
       email: email || user.email,
       name: email ? email.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()) : user.name,
@@ -66,9 +87,9 @@ export const AuthProvider = ({ children }) => {
     return { success: true };
   };
 
-  const register = ({ name, email, password, companyName, role = 'Company Admin' }) => {
+  const register = ({ name, email, companyName, role = 'Company Admin' }: RegisterParams) => {
     const generatedTenantId = `TNT-${companyName.trim().substring(0, 4).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newUser = {
+    const newUser: UserProfile = {
       id: `usr_${Date.now()}`,
       name,
       email,
@@ -80,7 +101,7 @@ export const AuthProvider = ({ children }) => {
       joinedDate: 'Just now',
     };
 
-    const newTenant = {
+    const newTenant: TenantSettings = {
       ...tenantSettings,
       companyName,
       tenantId: generatedTenantId,
@@ -96,21 +117,21 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
   };
 
-  const switchRole = (newRole) => {
+  const switchRole = (newRole: Role) => {
     setUser(prev => ({
       ...prev,
       role: newRole,
     }));
   };
 
-  const updateProfile = (data) => {
+  const updateProfile = (data: Partial<UserProfile>) => {
     setUser(prev => ({ ...prev, ...data }));
   };
 
-  const updateTenant = (data) => {
+  const updateTenant = (data: Partial<TenantSettings>) => {
     setTenantSettings(prev => ({ ...prev, ...data }));
     if (data.companyName) {
-      setUser(prev => ({ ...prev, companyName: data.companyName }));
+      setUser(prev => ({ ...prev, companyName: data.companyName! }));
     }
   };
 
@@ -133,7 +154,7 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');

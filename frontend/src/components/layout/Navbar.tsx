@@ -11,15 +11,28 @@ import {
   Settings,
   Shield,
   Briefcase,
-  Check,
   Building,
   CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNotification } from '../../context/NotificationContext';
+import { Role } from '../../types';
 
-export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
+interface NavbarProps {
+  setIsMobileOpen: (open: boolean) => void;
+  onOpenSearch: () => void;
+}
+
+interface NotificationItem {
+  id: number;
+  title: string;
+  description: string;
+  time: string;
+  read: boolean;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch }) => {
   const { user, tenantSettings, logout, switchRole } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { notify } = useNotification();
@@ -29,10 +42,10 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(3);
 
-  const profileRef = useRef(null);
-  const notifRef = useRef(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
-  const [notifications, setNotifications] = useState([
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
       id: 1,
       title: 'Deal Won: $64,000',
@@ -65,11 +78,11 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
 
   // Click outside listener for dropdowns
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (profileRef.current && !profileRef.current.contains(e.target)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setIsProfileOpen(false);
       }
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setIsNotificationOpen(false);
       }
     };
@@ -83,7 +96,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
     navigate('/login');
   };
 
-  const handleRoleToggle = (targetRole) => {
+  const handleRoleToggle = (targetRole: Role) => {
     switchRole(targetRole);
     notify(`Simulated role switched to: ${targetRole}`, 'success');
   };
@@ -100,7 +113,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
       <div className="flex items-center gap-3 flex-1 max-w-xl">
         <button
           onClick={() => setIsMobileOpen(true)}
-          className="md:hidden p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="md:hidden p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           aria-label="Open mobile navigation"
         >
           <Menu className="w-5 h-5" />
@@ -111,7 +124,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
           <button
             type="button"
             onClick={onOpenSearch}
-            className="w-full flex items-center justify-between pl-10 pr-3 py-2 text-sm text-slate-400 dark:text-slate-500 bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl hover:bg-slate-100 hover:border-slate-300 dark:hover:border-slate-600 transition-all text-left group"
+            className="w-full flex items-center justify-between pl-10 pr-3 py-2 text-sm text-slate-400 dark:text-slate-500 bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-xl hover:bg-slate-100 hover:border-slate-300 dark:hover:border-slate-600 transition-all text-left group cursor-pointer"
           >
             <Search className="w-4 h-4 absolute left-3.5 top-2.5 text-slate-400 group-hover:text-brand-500 transition-colors" />
             <span className="truncate">Search leads, clients, invoices, team...</span>
@@ -133,12 +146,12 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
         {/* Theme Toggle Button */}
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all"
+          className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer"
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
           aria-label="Toggle theme"
         >
           {theme === 'dark' ? (
-            <Sun className="w-5 h-5 text-amber-400 animate-spin-slow" />
+            <Sun className="w-5 h-5 text-amber-400" />
           ) : (
             <Moon className="w-5 h-5 text-slate-600" />
           )}
@@ -148,7 +161,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => setIsNotificationOpen(!isNotificationOpen)}
-            className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all"
+            className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer"
             aria-label="View notifications"
           >
             <Bell className="w-5 h-5" />
@@ -171,7 +184,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
                 {unreadCount > 0 && (
                   <button
                     onClick={markAllNotificationsAsRead}
-                    className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium"
+                    className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium cursor-pointer"
                   >
                     Mark all read
                   </button>
@@ -217,7 +230,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all group"
+            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all group cursor-pointer"
           >
             <div className="relative">
               <img
@@ -276,7 +289,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
                 <div className="grid grid-cols-2 gap-1.5 bg-slate-200/60 dark:bg-slate-800 p-1 rounded-xl">
                   <button
                     onClick={() => handleRoleToggle('Company Admin')}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                       user.role === 'Company Admin'
                         ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -286,7 +299,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
                   </button>
                   <button
                     onClick={() => handleRoleToggle('Employee')}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                       user.role === 'Employee'
                         ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -329,7 +342,7 @@ export const Navbar = ({ setIsMobileOpen, onOpenSearch }) => {
               <div className="p-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>Sign Out</span>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -12,14 +12,35 @@ import {
   ShieldCheck,
   Building2,
   Sparkles,
+  LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }) => {
+interface SidebarProps {
+  isCollapsed: boolean;
+  setIsCollapsed: (collapsed: boolean) => void;
+  isMobileOpen: boolean;
+  setIsMobileOpen: (open: boolean) => void;
+}
+
+interface NavItem {
+  name: string;
+  path: string;
+  icon: LucideIcon;
+  badge: string | null;
+  isActiveMatch?: (pathname: string, search: string) => boolean;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  isCollapsed,
+  setIsCollapsed,
+  isMobileOpen,
+  setIsMobileOpen,
+}) => {
   const { user, tenantSettings } = useAuth();
   const location = useLocation();
 
-  const navItems = [
+  const navItems: NavItem[] = [
     {
       name: 'Dashboard',
       path: '/dashboard',
@@ -49,14 +70,14 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
       path: '/settings?tab=team',
       icon: UserCheck,
       badge: null,
-      isActiveMatch: (pathname, search) => pathname === '/settings' && search.includes('tab=team'),
+      isActiveMatch: (pathname: string, search: string) => pathname === '/settings' && search.includes('tab=team'),
     },
     {
       name: 'Settings',
       path: '/settings',
       icon: Settings,
       badge: null,
-      isActiveMatch: (pathname, search) => pathname === '/settings' && !search.includes('tab=team'),
+      isActiveMatch: (pathname: string, search: string) => pathname === '/settings' && !search.includes('tab=team'),
     },
   ];
 
@@ -99,7 +120,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobile
             {/* Collapse button for desktop */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}

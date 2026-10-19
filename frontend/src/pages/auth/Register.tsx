@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Building2,
@@ -13,14 +13,14 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
+import { Role } from '../../types';
 
-export const Register = () => {
+export const Register: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [role, setRole] = useState('Company Admin');
-  const [industry, setIndustry] = useState('SaaS & Software');
+  const [role, setRole] = useState<Role>('Company Admin');
   const [isLoading, setIsLoading] = useState(false);
 
   const { register } = useAuth();
@@ -32,7 +32,7 @@ export const Register = () => {
     ? `TNT-${companyName.trim().substring(0, 4).toUpperCase()}-9402`
     : 'TNT-CORP-9402';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!companyName.trim()) {
       notify('Please enter your Company Name to provision your Tenant ID', 'warning');

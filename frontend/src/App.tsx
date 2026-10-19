@@ -5,7 +5,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
 import { AppRoutes } from './routes/AppRoutes';
 
-function App() {
+const App: React.FC = () => {
   return (
     <BrowserRouter>
       <ThemeProvider>
@@ -17,6 +17,6 @@ function App() {
       </ThemeProvider>
     </BrowserRouter>
   );
-}
+};
 
 export default App;

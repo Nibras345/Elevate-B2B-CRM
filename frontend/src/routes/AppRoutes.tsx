@@ -10,7 +10,7 @@ import { Clients } from '../pages/Clients';
 import { Invoices } from '../pages/Invoices';
 import { Settings } from '../pages/Settings';
 
-export const AppRoutes = () => {
+export const AppRoutes: React.FC = () => {
   return (
     <Routes>
       {/* Public Authentication Routes */}

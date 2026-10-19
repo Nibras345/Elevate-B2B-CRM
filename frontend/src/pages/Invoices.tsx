@@ -1,34 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Receipt,
   Plus,
   Search,
-  Filter,
-  Download,
   Printer,
-  DollarSign,
-  Calendar,
-  Building,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
   Trash2,
   Eye,
-  FileText,
-  Percent,
   Check,
-  Send,
   Building2,
+  CheckCircle2,
 } from 'lucide-react';
 import { initialInvoices, initialClients } from '../data/mockData';
 import { Modal } from '../components/common/Modal';
-import { Badge } from '../components/common/Badge';
+import { Badge, BadgeVariant } from '../components/common/Badge';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
+import { Invoice, InvoiceItem, InvoiceStatus } from '../types';
 
-export const Invoices = () => {
-  const [invoices, setInvoices] = useState(initialInvoices);
+export const Invoices: React.FC = () => {
+  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
   const [searchParams] = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
 
@@ -44,14 +34,14 @@ export const Invoices = () => {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [invoiceNotes, setInvoiceNotes] = useState('Thank you for partnering with us. Payment is due within 30 days of issuance.');
 
-  const [items, setItems] = useState([
+  const [items, setItems] = useState<InvoiceItem[]>([
     { id: '1', description: 'Enterprise Platform Subscription (Quarterly)', quantity: 1, unitPrice: 24000, amount: 24000 },
     { id: '2', description: 'Dedicated Solution Architect & Onboarding', quantity: 1, unitPrice: 8500, amount: 8500 },
   ]);
 
   // Preview Modal state
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [activeInvoiceForPreview, setActiveInvoiceForPreview] = useState(null);
+  const [activeInvoiceForPreview, setActiveInvoiceForPreview] = useState<Invoice | null>(null);
 
   const { notify } = useNotification();
   const { user, tenantSettings } = useAuth();
@@ -79,7 +69,7 @@ export const Invoices = () => {
 
   // Add Item Row
   const handleAddItem = () => {
-    const newItem = {
+    const newItem: InvoiceItem = {
       id: String(Date.now()),
       description: '',
       quantity: 1,
@@ -90,7 +80,7 @@ export const Invoices = () => {
   };
 
   // Remove Item Row
-  const handleRemoveItem = (id) => {
+  const handleRemoveItem = (id: string) => {
     if (items.length <= 1) {
       notify('An invoice must have at least one line item', 'warning');
       return;
@@ -99,7 +89,7 @@ export const Invoices = () => {
   };
 
   // Update Item field
-  const handleUpdateItem = (id, field, value) => {
+  const handleUpdateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
     setItems(items.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
@@ -113,7 +103,7 @@ export const Invoices = () => {
   };
 
   // Submit invoice generation
-  const handleGenerateInvoice = (e) => {
+  const handleGenerateInvoice = (e: FormEvent) => {
     e.preventDefault();
     if (!selectedClientId) {
       notify('Please select an enterprise client', 'warning');
@@ -124,7 +114,7 @@ export const Invoices = () => {
     const generatedId = `INV-2025-${String(invoices.length + 1).padStart(3, '0')}`;
     const today = new Date().toISOString().split('T')[0];
 
-    const newInvoice = {
+    const newInvoice: Invoice = {
       id: generatedId,
       clientId: client.id,
       clientName: client.name,
@@ -153,16 +143,16 @@ export const Invoices = () => {
   };
 
   // Mark as paid
-  const handleMarkPaid = (id) => {
+  const handleMarkPaid = (id: string) => {
     setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'Paid' } : inv));
     if (activeInvoiceForPreview && activeInvoiceForPreview.id === id) {
-      setActiveInvoiceForPreview(prev => ({ ...prev, status: 'Paid' }));
+      setActiveInvoiceForPreview(prev => (prev ? { ...prev, status: 'Paid' } : null));
     }
     notify(`Invoice ${id} marked as Paid`, 'success');
   };
 
   // Delete invoice
-  const handleDeleteInvoice = (id) => {
+  const handleDeleteInvoice = (id: string) => {
     setInvoices(prev => prev.filter(inv => inv.id !== id));
     setIsPreviewOpen(false);
     notify(`Invoice ${id} deleted`, 'info');
@@ -221,10 +211,10 @@ export const Invoices = () => {
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Invoiced', value: `$${totalInvoiced.toLocaleString()}`, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/60' },
-          { label: 'Settled & Paid', value: `$${paidTotal.toLocaleString()}`, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60' },
-          { label: 'Pending Payment', value: `$${pendingTotal.toLocaleString()}`, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60' },
-          { label: 'Overdue Balance', value: `$${overdueTotal.toLocaleString()}`, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/60' },
+          { label: 'Total Invoiced', value: `$${totalInvoiced.toLocaleString()}` },
+          { label: 'Settled & Paid', value: `$${paidTotal.toLocaleString()}` },
+          { label: 'Pending Payment', value: `$${pendingTotal.toLocaleString()}` },
+          { label: 'Overdue Balance', value: `$${overdueTotal.toLocaleString()}` },
         ].map((stat, idx) => (
           <div
             key={idx}
@@ -258,7 +248,7 @@ export const Invoices = () => {
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
                 statusFilter === status
                   ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -288,7 +278,7 @@ export const Invoices = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {filteredInvoices.length > 0 ? (
                 filteredInvoices.map((inv) => {
-                  let statusBadge = 'neutral';
+                  let statusBadge: BadgeVariant = 'neutral';
                   if (inv.status === 'Paid') statusBadge = 'success';
                   if (inv.status === 'Pending') statusBadge = 'warning';
                   if (inv.status === 'Overdue') statusBadge = 'danger';
@@ -353,7 +343,7 @@ export const Invoices = () => {
                               setIsPreviewOpen(true);
                             }}
                             title="Interactive Preview & PDF"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -362,7 +352,7 @@ export const Invoices = () => {
                             <button
                               onClick={() => handleMarkPaid(inv.id)}
                               title="Mark as Paid"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                             >
                               <CheckCircle2 className="w-4 h-4" />
                             </button>
@@ -371,7 +361,7 @@ export const Invoices = () => {
                           <button
                             onClick={() => handleDeleteInvoice(inv.id)}
                             title="Delete Invoice"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -461,7 +451,7 @@ export const Invoices = () => {
               <button
                 type="button"
                 onClick={handleAddItem}
-                className="text-xs text-brand-600 dark:text-brand-400 font-bold hover:underline flex items-center gap-1"
+                className="text-xs text-brand-600 dark:text-brand-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Item</span>
@@ -469,7 +459,7 @@ export const Invoices = () => {
             </div>
 
             <div className="space-y-2">
-              {items.map((item, index) => (
+              {items.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs"
@@ -491,7 +481,7 @@ export const Invoices = () => {
                       min="1"
                       placeholder="Qty"
                       value={item.quantity}
-                      onChange={(e) => handleUpdateItem(item.id, 'quantity', e.target.value)}
+                      onChange={(e) => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
                       className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-center"
                     />
                   </div>
@@ -502,7 +492,7 @@ export const Invoices = () => {
                       min="0"
                       placeholder="Unit Price"
                       value={item.unitPrice}
-                      onChange={(e) => handleUpdateItem(item.id, 'unitPrice', e.target.value)}
+                      onChange={(e) => handleUpdateItem(item.id, 'unitPrice', Number(e.target.value))}
                       className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
                     />
                   </div>
@@ -514,7 +504,7 @@ export const Invoices = () => {
                   <button
                     type="button"
                     onClick={() => handleRemoveItem(item.id)}
-                    className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors"
+                    className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -592,13 +582,13 @@ export const Invoices = () => {
             <button
               type="button"
               onClick={() => setIsGeneratorOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20"
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
             >
               Issue & Preview Invoice
             </button>
@@ -637,7 +627,7 @@ export const Invoices = () => {
                 {activeInvoiceForPreview.status !== 'Paid' && (
                   <button
                     onClick={() => handleMarkPaid(activeInvoiceForPreview.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>Mark as Paid</span>

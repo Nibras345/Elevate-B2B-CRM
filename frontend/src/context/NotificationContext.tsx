@@ -1,18 +1,30 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { CheckCircle2, AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 
-const NotificationContext = createContext();
+export type ToastType = 'success' | 'info' | 'warning' | 'error';
 
-export const NotificationProvider = ({ children }) => {
-  const [toasts, setToasts] = useState([]);
+export interface ToastItem {
+  id: string;
+  message: string;
+  type: ToastType;
+}
 
-  const removeToast = useCallback((id) => {
+interface NotificationContextType {
+  notify: (message: string, type?: ToastType, duration?: number) => void;
+}
+
+const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+
+export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const notify = useCallback((message, type = 'success', duration = 4000) => {
+  const notify = useCallback((message: string, type: ToastType = 'success', duration = 4000) => {
     const id = Date.now() + Math.random().toString(36).substring(2, 9);
-    const newToast = { id, message, type };
+    const newToast: ToastItem = { id, message, type };
 
     setToasts((prev) => [...prev, newToast]);
 
@@ -55,7 +67,7 @@ export const NotificationProvider = ({ children }) => {
               </div>
               <button
                 onClick={() => removeToast(toast.id)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-lg transition-colors"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-lg transition-colors cursor-pointer"
                 aria-label="Close notification"
               >
                 <X className="w-4 h-4" />
@@ -68,7 +80,7 @@ export const NotificationProvider = ({ children }) => {
   );
 };
 
-export const useNotification = () => {
+export const useNotification = (): NotificationContextType => {
   const context = useContext(NotificationContext);
   if (!context) {
     throw new Error('useNotification must be used within a NotificationProvider');

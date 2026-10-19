@@ -1,4 +1,15 @@
-export const initialLeads = [
+import {
+  Lead,
+  Client,
+  Invoice,
+  TeamMember,
+  KPIItem,
+  RevenueDataPoint,
+  StageFunnelItem,
+  ActivityItem,
+} from '../types';
+
+export const initialLeads: Lead[] = [
   {
     id: 'lead-1',
     name: 'Sarah Jenkins',
@@ -201,7 +212,7 @@ export const initialLeads = [
   },
 ];
 
-export const initialClients = [
+export const initialClients: Client[] = [
   {
     id: 'cli-001',
     name: 'Kavita Patel',
@@ -364,7 +375,7 @@ export const initialClients = [
   },
 ];
 
-export const initialInvoices = [
+export const initialInvoices: Invoice[] = [
   {
     id: 'INV-2025-001',
     clientId: 'cli-001',
@@ -466,7 +477,7 @@ export const initialInvoices = [
   },
 ];
 
-export const initialTeamMembers = [
+export const initialTeamMembers: TeamMember[] = [
   {
     id: 'team-1',
     name: 'Alex Morgan',
@@ -579,7 +590,7 @@ export const dashboardAnalytics = {
       isPositive: true,
       color: 'purple',
     },
-  ],
+  ] as KPIItem[],
   monthlyRevenue: [
     { month: 'Apr', revenue: 28500, target: 25000 },
     { month: 'May', revenue: 32400, target: 30000 },
@@ -593,14 +604,14 @@ export const dashboardAnalytics = {
     { month: 'Jan', revenue: 54100, target: 52000 },
     { month: 'Feb', revenue: 62800, target: 58000 },
     { month: 'Mar', revenue: 68500, target: 62000 },
-  ],
+  ] as RevenueDataPoint[],
   stageFunnel: [
     { stage: 'New Lead', count: 42, value: '$284,000', percentage: 100, color: 'bg-slate-400' },
     { stage: 'Contacted', count: 28, value: '$198,000', percentage: 76, color: 'bg-blue-500' },
     { stage: 'Proposal Sent', count: 18, value: '$245,000', percentage: 54, color: 'bg-indigo-500' },
     { stage: 'Negotiation', count: 12, value: '$188,000', percentage: 38, color: 'bg-amber-500' },
     { stage: 'Won', count: 9, value: '$142,000', percentage: 26, color: 'bg-emerald-500' },
-  ],
+  ] as StageFunnelItem[],
   recentActivities: [
     {
       id: 'act-1',
@@ -652,5 +663,5 @@ export const dashboardAnalytics = {
       time: 'Yesterday at 4:30 PM',
       type: 'payment',
     },
-  ],
+  ] as ActivityItem[],
 };

@@ -1,31 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import {
   Plus,
   Search,
-  Filter,
-  MoreVertical,
-  DollarSign,
-  Calendar,
   Building,
-  User,
-  Tag,
-  ArrowRight,
   GripVertical,
-  CheckCircle2,
   Trash2,
-  Edit3,
-  ExternalLink,
-  ChevronDown,
-  Sparkles,
 } from 'lucide-react';
 import { initialLeads, initialTeamMembers } from '../data/mockData';
 import { Drawer } from '../components/common/Drawer';
 import { Modal } from '../components/common/Modal';
-import { Badge } from '../components/common/Badge';
+import { Badge, BadgeVariant } from '../components/common/Badge';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
+import { Lead, PipelineStage, Priority } from '../types';
 
-const PIPELINE_STAGES = [
+interface StageConfig {
+  id: PipelineStage;
+  label: string;
+  color: string;
+}
+
+const PIPELINE_STAGES: StageConfig[] = [
   { id: 'New Lead', label: 'New Lead', color: 'border-t-slate-400 bg-slate-500/10' },
   { id: 'Contacted', label: 'Contacted', color: 'border-t-blue-500 bg-blue-500/10' },
   { id: 'Proposal Sent', label: 'Proposal Sent', color: 'border-t-indigo-500 bg-indigo-500/10' },
@@ -33,14 +28,14 @@ const PIPELINE_STAGES = [
   { id: 'Won', label: 'Won / Closed', color: 'border-t-emerald-500 bg-emerald-500/10' },
 ];
 
-export const LeadsPipeline = () => {
-  const [leads, setLeads] = useState(initialLeads);
+export const LeadsPipeline: React.FC = () => {
+  const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [searchQuery, setSearchQuery] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
 
   // Selected lead for View/Edit Drawer
-  const [selectedLead, setSelectedLead] = useState(null);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Add New Lead Modal state
@@ -51,8 +46,8 @@ export const LeadsPipeline = () => {
     email: '',
     phone: '',
     value: '',
-    priority: 'High',
-    stage: 'New Lead',
+    priority: 'High' as Priority,
+    stage: 'New Lead' as PipelineStage,
     assignedToName: 'Alex Morgan',
     tags: 'Enterprise, Q1',
     notes: '',
@@ -75,7 +70,7 @@ export const LeadsPipeline = () => {
   });
 
   // Calculate stage summary stats
-  const getStageStats = (stageId) => {
+  const getStageStats = (stageId: PipelineStage) => {
     const stageItems = filteredLeads.filter((l) => l.stage === stageId);
     const count = stageItems.length;
     const totalVal = stageItems.reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
@@ -83,7 +78,7 @@ export const LeadsPipeline = () => {
   };
 
   // Move lead to another stage
-  const moveLeadStage = (leadId, targetStage) => {
+  const moveLeadStage = (leadId: string, targetStage: PipelineStage) => {
     setLeads((prev) =>
       prev.map((l) => {
         if (l.id === leadId) {
@@ -98,21 +93,22 @@ export const LeadsPipeline = () => {
     );
 
     if (selectedLead && selectedLead.id === leadId) {
-      setSelectedLead((prev) => ({ ...prev, stage: targetStage }));
+      setSelectedLead((prev) => (prev ? { ...prev, stage: targetStage } : null));
     }
 
     notify(`Lead successfully moved to ${targetStage}`, 'success');
   };
 
   // Open edit drawer
-  const handleOpenLead = (lead) => {
+  const handleOpenLead = (lead: Lead) => {
     setSelectedLead({ ...lead });
     setIsDrawerOpen(true);
   };
 
   // Save drawer edits
-  const handleSaveLeadEdits = (e) => {
+  const handleSaveLeadEdits = (e: FormEvent) => {
     e.preventDefault();
+    if (!selectedLead) return;
     setLeads((prev) =>
       prev.map((l) => (l.id === selectedLead.id ? selectedLead : l))
     );
@@ -121,14 +117,14 @@ export const LeadsPipeline = () => {
   };
 
   // Delete lead
-  const handleDeleteLead = (leadId) => {
+  const handleDeleteLead = (leadId: string) => {
     setLeads((prev) => prev.filter((l) => l.id !== leadId));
     setIsDrawerOpen(false);
     notify('Lead removed from sales pipeline', 'info');
   };
 
   // Handle Add New Lead
-  const handleCreateLead = (e) => {
+  const handleCreateLead = (e: FormEvent) => {
     e.preventDefault();
     const assignedUser = initialTeamMembers.find(m => m.name === newLeadForm.assignedToName) || {
       name: newLeadForm.assignedToName,
@@ -136,7 +132,7 @@ export const LeadsPipeline = () => {
       role: 'Sales Agent',
     };
 
-    const newLead = {
+    const newLead: Lead = {
       id: `lead-${Date.now()}`,
       name: newLeadForm.name,
       company: newLeadForm.company,
@@ -255,7 +251,7 @@ export const LeadsPipeline = () => {
                 setOwnerFilter('All');
                 setPriorityFilter('All');
               }}
-              className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-semibold px-2 py-1"
+              className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-semibold px-2 py-1 cursor-pointer"
             >
               Reset Filters
             </button>
@@ -299,7 +295,7 @@ export const LeadsPipeline = () => {
               <div className="space-y-3 flex-1 overflow-y-auto pt-1">
                 {stageCards.length > 0 ? (
                   stageCards.map((lead) => {
-                    let priorityBadge = 'warning';
+                    let priorityBadge: BadgeVariant = 'warning';
                     if (lead.priority === 'High') priorityBadge = 'danger';
                     if (lead.priority === 'Low') priorityBadge = 'neutral';
 
@@ -327,7 +323,7 @@ export const LeadsPipeline = () => {
                           >
                             <select
                               value={lead.stage}
-                              onChange={(e) => moveLeadStage(lead.id, e.target.value)}
+                              onChange={(e) => moveLeadStage(lead.id, e.target.value as PipelineStage)}
                               className="text-[10px] font-semibold bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded px-1.5 py-0.5 border border-slate-200 dark:border-slate-600 focus:outline-hidden cursor-pointer"
                               title="Move stage"
                             >
@@ -413,7 +409,7 @@ export const LeadsPipeline = () => {
                     key={s.id}
                     type="button"
                     onClick={() => setSelectedLead({ ...selectedLead, stage: s.id })}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-semibold text-center transition-all ${
+                    className={`py-1.5 px-2 rounded-lg text-xs font-semibold text-center transition-all cursor-pointer ${
                       selectedLead.stage === s.id
                         ? 'bg-brand-600 text-white shadow-xs'
                         : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
@@ -475,7 +471,7 @@ export const LeadsPipeline = () => {
                 </label>
                 <select
                   value={selectedLead.priority}
-                  onChange={(e) => setSelectedLead({ ...selectedLead, priority: e.target.value })}
+                  onChange={(e) => setSelectedLead({ ...selectedLead, priority: e.target.value as Priority })}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
                 >
                   <option value="High">High</option>
@@ -538,7 +534,7 @@ export const LeadsPipeline = () => {
               <button
                 type="button"
                 onClick={() => handleDeleteLead(selectedLead.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Delete Lead</span>
@@ -548,13 +544,13 @@ export const LeadsPipeline = () => {
                 <button
                   type="button"
                   onClick={() => setIsDrawerOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20"
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
                 >
                   Save Changes
                 </button>
@@ -624,7 +620,7 @@ export const LeadsPipeline = () => {
               </label>
               <select
                 value={newLeadForm.stage}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, stage: e.target.value })}
+                onChange={(e) => setNewLeadForm({ ...newLeadForm, stage: e.target.value as PipelineStage })}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
               >
                 {PIPELINE_STAGES.map((s) => (
@@ -643,7 +639,7 @@ export const LeadsPipeline = () => {
               </label>
               <select
                 value={newLeadForm.priority}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, priority: e.target.value })}
+                onChange={(e) => setNewLeadForm({ ...newLeadForm, priority: e.target.value as Priority })}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
               >
                 <option value="High">High Priority</option>
@@ -713,13 +709,13 @@ export const LeadsPipeline = () => {
             <button
               type="button"
               onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20"
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
             >
               Add to Pipeline
             </button>
