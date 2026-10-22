@@ -8,15 +8,16 @@ import {
   ShieldCheck,
   CheckCircle2,
   Sparkles,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { Role } from '../../types';
 
 export const SignIn: React.FC = () => {
-  const [email, setEmail] = useState('sarah.admin@apexcorp.com');
-  const [password, setPassword] = useState('SecurePassword123!');
-  const [selectedRole, setSelectedRole] = useState<Role>('Company Admin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const { login } = useAuth();
@@ -27,27 +28,14 @@ export const SignIn: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    const res = await login(email, password, selectedRole);
+    const res = await login(email, password);
     if (res.success) {
-      notify(res.message || `Welcome back! Signed in as ${selectedRole}`, 'success');
+      notify(res.message || 'Welcome back! Signed in successfully.', 'success');
       navigate('/dashboard');
     } else {
       notify(res.message || 'Authentication failed. Please check your credentials.', 'error');
     }
     setIsLoading(false);
-  };
-
-  const handleDemoFill = (role: Role) => {
-    if (role === 'Company Admin') {
-      setEmail('sarah.admin@apexcorp.com');
-      setPassword('SecurePassword123!');
-      setSelectedRole('Company Admin');
-    } else {
-      setEmail('sarah.admin@apexcorp.com');
-      setPassword('SecurePassword123!');
-      setSelectedRole('Employee');
-    }
-    notify(`Prefilled credentials for ${role}`, 'info');
   };
 
   return (
@@ -122,37 +110,6 @@ export const SignIn: React.FC = () => {
             </p>
           </div>
 
-          {/* Role Selection simulation tabs */}
-          <div className="bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
-            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block px-2 mb-1">
-              Select Demo Role
-            </label>
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => handleDemoFill('Company Admin')}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  selectedRole === 'Company Admin'
-                    ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                Company Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoFill('Employee')}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  selectedRole === 'Employee'
-                    ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                }`}
-              >
-                Sales Employee
-              </button>
-            </div>
-          </div>
-
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -160,13 +117,13 @@ export const SignIn: React.FC = () => {
                 Work Email Address
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400 pointer-events-none" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-500 transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-500 transition-all placeholder-slate-400"
                   placeholder="name@company.com"
                 />
               </div>
@@ -189,15 +146,24 @@ export const SignIn: React.FC = () => {
                 </a>
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                <Lock className="w-4 h-4 absolute left-3.5 top-3 text-slate-400 pointer-events-none" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-500 transition-all"
+                  className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-500 transition-all placeholder-slate-400"
                   placeholder="••••••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -221,7 +187,7 @@ export const SignIn: React.FC = () => {
                 <span>Authenticating...</span>
               ) : (
                 <>
-                  <span>Sign In as {selectedRole}</span>
+                  <span>Sign In</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
