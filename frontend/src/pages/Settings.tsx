@@ -18,6 +18,7 @@ import { Modal } from '../components/common/Modal';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { TeamMember, Role } from '../types';
+import { ProfileSettings } from '../components/profile/ProfileSettings';
 
 export const Settings: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,23 +41,6 @@ export const Settings: React.FC = () => {
     setActiveTab(tab);
     setSearchParams({ tab });
   };
-
-  // Profile Form State
-  const [profileForm, setProfileForm] = useState({
-    name: user.name,
-    email: user.email,
-    phone: '+1 (555) 234-5678',
-    department: user.department || 'Executive Sales',
-    avatar: user.avatar,
-    timezone: 'UTC-08:00 (Pacific Time)',
-  });
-
-  // Password State
-  const [passForm, setPassForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
 
   // Company Settings Form State
   const [companyForm, setCompanyForm] = useState({
@@ -90,29 +74,6 @@ export const Settings: React.FC = () => {
   });
 
   const isAdmin = user.role === 'Company Admin';
-
-  // Save Profile
-  const handleSaveProfile = (e: FormEvent) => {
-    e.preventDefault();
-    updateProfile({
-      name: profileForm.name,
-      email: profileForm.email,
-      avatar: profileForm.avatar,
-      department: profileForm.department,
-    });
-    notify('Profile updated successfully', 'success');
-  };
-
-  // Change Password
-  const handleChangePassword = (e: FormEvent) => {
-    e.preventDefault();
-    if (passForm.newPassword !== passForm.confirmPassword) {
-      notify('New passwords do not match', 'error');
-      return;
-    }
-    setPassForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    notify('Security password updated', 'success');
-  };
 
   // Save Company Settings (Admin only)
   const handleSaveCompany = (e: FormEvent) => {
@@ -207,197 +168,8 @@ export const Settings: React.FC = () => {
         })}
       </div>
 
-      {/* TAB 1: Profile */}
-      {activeTab === 'profile' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Avatar Card */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col items-center text-center">
-            <div className="relative group">
-              <img
-                src={profileForm.avatar}
-                alt={user.name}
-                className="w-24 h-24 rounded-2xl object-cover ring-4 ring-brand-500/20 shadow-md"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const newUrl = prompt('Enter image URL for your profile avatar:');
-                  if (newUrl) {
-                    setProfileForm({ ...profileForm, avatar: newUrl });
-                    notify('Avatar image updated', 'info');
-                  }
-                }}
-                className="absolute -bottom-2 -right-2 p-2 bg-brand-600 text-white rounded-xl shadow-md hover:bg-brand-500 transition-colors cursor-pointer"
-                title="Change Avatar"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
-            </div>
-
-            <h3 className="mt-4 text-base font-bold text-slate-900 dark:text-white">
-              {profileForm.name}
-            </h3>
-            <p className="text-xs text-slate-400">{profileForm.email}</p>
-
-            <div className="mt-3 flex items-center gap-1.5">
-              <Badge variant="primary" size="sm">
-                {user.role}
-              </Badge>
-              <Badge variant="neutral" size="sm">
-                {user.tenantId}
-              </Badge>
-            </div>
-
-            <div className="mt-6 w-full pt-4 border-t border-slate-100 dark:border-slate-800 text-left text-xs space-y-2 text-slate-500">
-              <div className="flex justify-between">
-                <span>Joined Workspace:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Jan 2024</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Department:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{profileForm.department}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Personal Information & Password Form */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4">
-                Personal Information
-              </h3>
-
-              <form onSubmit={handleSaveProfile} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={profileForm.name}
-                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={profileForm.email}
-                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Phone Number
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Department
-                    </label>
-                    <input
-                      type="text"
-                      value={profileForm.department}
-                      onChange={(e) => setProfileForm({ ...profileForm, department: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Change Password Form */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Key className="w-4 h-4 text-brand-500" />
-                <span>Security & Password</span>
-              </h3>
-
-              <form onSubmit={handleChangePassword} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Current Password
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••••••"
-                      value={passForm.currentPassword}
-                      onChange={(e) => setPassForm({ ...passForm, currentPassword: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      New Password
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="Min 8 chars"
-                      value={passForm.newPassword}
-                      onChange={(e) => setPassForm({ ...passForm, newPassword: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Confirm New Password
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="Repeat new password"
-                      value={passForm.confirmPassword}
-                      onChange={(e) => setPassForm({ ...passForm, confirmPassword: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white dark:bg-slate-700 dark:hover:bg-slate-600 rounded-xl text-xs font-semibold cursor-pointer"
-                  >
-                    Update Password
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* TAB 1: Profile (Personal Information & Cloudinary Profile Picture) */}
+      {activeTab === 'profile' && <ProfileSettings />}
 
       {/* TAB 2: Company Settings (Admin Only) */}
       {activeTab === 'company' && (

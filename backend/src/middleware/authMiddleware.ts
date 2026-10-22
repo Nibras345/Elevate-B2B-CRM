@@ -49,13 +49,17 @@ export const protect = async (
 
     // Attach user and tenant info to request
     req.user = {
+      id: currentUser._id.toString(),
       _id: currentUser._id,
       name: currentUser.name,
+      fullName: currentUser.name,
       email: currentUser.email,
       role: currentUser.role,
       tenantId: currentUser.tenantId,
       companyName: (currentUser as any).tenant?.name,
-      avatar: currentUser.avatar,
+      avatar: currentUser.profilePicture || currentUser.avatar,
+      profilePicture: currentUser.profilePicture || currentUser.avatar,
+      phone: currentUser.phone || '',
       department: currentUser.department,
       isActive: currentUser.isActive,
     };

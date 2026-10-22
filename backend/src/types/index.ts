@@ -11,13 +11,17 @@ export interface JwtPayload {
 }
 
 export interface AuthenticatedUser {
+  id?: string;
   _id: Types.ObjectId | string;
   name: string;
+  fullName?: string;
   email: string;
   role: UserRole;
   tenantId: string;
   companyName?: string;
   avatar?: string;
+  profilePicture?: string;
+  phone?: string;
   department?: string;
   isActive: boolean;
 }

@@ -94,9 +94,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const u = data.user;
           const userProfile: UserProfile = {
             id: u._id || u.id,
-            name: u.name,
+            name: u.fullName || u.name,
+            fullName: u.fullName || u.name,
             email: u.email,
-            avatar: u.avatar || DEFAULT_USER.avatar,
+            avatar: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
+            profilePicture: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
+            phone: u.phone || '',
             role: u.role,
             companyName: u.companyName || (data.tenant ? data.tenant.name : 'Enterprise Workspace'),
             tenantId: u.tenantId,
@@ -173,9 +176,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const userProfile: UserProfile = {
         id: u.id || u._id,
-        name: u.name,
+        name: u.fullName || u.name,
+        fullName: u.fullName || u.name,
         email: u.email,
-        avatar: u.avatar || DEFAULT_USER.avatar,
+        avatar: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
+        profilePicture: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
+        phone: u.phone || '',
         role: u.role,
         companyName: u.companyName || t?.name || 'Enterprise Workspace',
         tenantId: u.tenantId,

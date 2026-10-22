@@ -90,8 +90,11 @@ export interface TeamMember {
 export interface UserProfile {
   id: string;
   name: string;
+  fullName?: string;
   email: string;
   avatar: string;
+  profilePicture?: string;
+  phone?: string;
   role: Role;
   companyName: string;
   tenantId: string;
