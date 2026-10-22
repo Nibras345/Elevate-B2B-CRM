@@ -86,7 +86,11 @@ UserSchema.pre<IUser>('save', async function () {
   if (!this.isModified('password')) {
     return;
   }
-  const salt = await bcrypt.genSalt(12);
+  // Skip rehashing if password is already a valid bcrypt hash
+  if (/^\$2[abxy]\$\d{2}\$[./0-9A-Za-z]{53}$/.test(this.password)) {
+    return;
+  }
+  const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
 

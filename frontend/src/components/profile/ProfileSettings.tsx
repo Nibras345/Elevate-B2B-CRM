@@ -13,6 +13,11 @@ import {
   Building,
   UploadCloud,
   X,
+  Key,
+  Lock,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
@@ -41,6 +46,125 @@ export const ProfileSettings: React.FC = () => {
     type: 'success' | 'error' | null;
     text: string;
   }>({ type: null, text: '' });
+
+  // Separate React state object for Security & Password section
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  const [isPasswordLoading, setIsPasswordLoading] = useState<boolean>(false);
+  const [passwordStatusMessage, setPasswordStatusMessage] = useState<{
+    type: 'success' | 'error' | null;
+    text: string;
+  }>({ type: null, text: '' });
+
+  const [showCurrentPassword, setShowCurrentPassword] = useState<boolean>(false);
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
+
+  // Security & Password form submission handler
+  const handlePasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setPasswordStatusMessage({ type: null, text: '' });
+
+    // Validate presence of current password
+    if (!passwordForm.currentPassword) {
+      const errorMsg = 'Please enter your current password.';
+      setPasswordStatusMessage({ type: 'error', text: errorMsg });
+      notify(errorMsg, 'error');
+      return;
+    }
+
+    // Validate presence of new password
+    if (!passwordForm.newPassword) {
+      const errorMsg = 'Please enter a new password.';
+      setPasswordStatusMessage({ type: 'error', text: errorMsg });
+      notify(errorMsg, 'error');
+      return;
+    }
+
+    // Validate minimum 8 characters for new password
+    if (passwordForm.newPassword.length < 8) {
+      const errorMsg = 'New password must be at least 8 characters long.';
+      setPasswordStatusMessage({ type: 'error', text: errorMsg });
+      notify(errorMsg, 'error');
+      return;
+    }
+
+    // Strictly check if New Password and Confirm New Password match
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      const errorMsg = 'New password and confirm password do not match.';
+      setPasswordStatusMessage({ type: 'error', text: errorMsg });
+      notify(errorMsg, 'error');
+      return;
+    }
+
+    // Check if new password is identical to current password
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      const errorMsg = 'New password must be different from your current password.';
+      setPasswordStatusMessage({ type: 'error', text: errorMsg });
+      notify(errorMsg, 'error');
+      return;
+    }
+
+    // Retrieve JWT token from local storage
+    const token =
+      localStorage.getItem('nexcrm_jwt_token') ||
+      localStorage.getItem('token') ||
+      '';
+
+    if (!token) {
+      const errorMsg = 'Authentication token missing. Please sign in again.';
+      setPasswordStatusMessage({ type: 'error', text: errorMsg });
+      notify(errorMsg, 'error');
+      return;
+    }
+
+    setIsPasswordLoading(true);
+
+    try {
+      // Axios PUT request to /api/users/change-password endpoint
+      const response = await axios.put(
+        '/api/users/change-password',
+        {
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Clear all three form inputs on success
+        setPasswordForm({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+        });
+
+        const successMsg = response.data.message || 'Password changed successfully.';
+        setPasswordStatusMessage({ type: 'success', text: successMsg });
+        notify(successMsg, 'success');
+      } else {
+        throw new Error(response.data.message || 'Failed to update password.');
+      }
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to update password. Please check your credentials and try again.';
+      setPasswordStatusMessage({ type: 'error', text: errorMsg });
+      notify(errorMsg, 'error');
+    } finally {
+      setIsPasswordLoading(false);
+    }
+  };
 
   // Sync state whenever authenticated user data updates externally
   useEffect(() => {
@@ -559,6 +683,195 @@ export const ProfileSettings: React.FC = () => {
                   <>
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Save Profile Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* SECTION 3: Security & Password Card */}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Key className="w-4 h-4 text-brand-500" />
+                <span>Security & Password</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Ensure your account is protected with a robust, randomized authentication password
+              </p>
+            </div>
+            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Bcrypt 10-Round Encryption</span>
+            </div>
+          </div>
+
+          {/* Inline Feedback Alerts */}
+          {passwordStatusMessage.type && (
+            <div
+              className={`mt-4 p-4 rounded-xl flex items-start gap-3 border text-xs ${
+                passwordStatusMessage.type === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              }`}
+            >
+              {passwordStatusMessage.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 mt-0.5 flex-shrink-0" />
+              )}
+              <div className="flex-1">
+                <span className="font-bold block">
+                  {passwordStatusMessage.type === 'success' ? 'Password Changed' : 'Update Failed'}
+                </span>
+                <span className="mt-0.5 block">{passwordStatusMessage.text}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPasswordStatusMessage({ type: null, text: '' })}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                title="Dismiss message"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handlePasswordSubmit} className="mt-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Field 1: Current Password */}
+              <div>
+                <label
+                  htmlFor="security-current-password"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                >
+                  Current Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    id="security-current-password"
+                    name="currentPassword"
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    required
+                    placeholder="••••••••••••"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))
+                    }
+                    disabled={isPasswordLoading}
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    tabIndex={-1}
+                    aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Field 2: New Password */}
+              <div>
+                <label
+                  htmlFor="security-new-password"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                >
+                  New Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Key className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    id="security-new-password"
+                    name="newPassword"
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Min 8 chars"
+                    value={passwordForm.newPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                    }
+                    disabled={isPasswordLoading}
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    tabIndex={-1}
+                    aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                  >
+                    {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Field 3: Confirm New Password */}
+              <div>
+                <label
+                  htmlFor="security-confirm-password"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                >
+                  Confirm New Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Key className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    id="security-confirm-password"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Repeat new password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) =>
+                      setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                    }
+                    disabled={isPasswordLoading}
+                    className="w-full pl-9 pr-9 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    tabIndex={-1}
+                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[11px] text-slate-400">
+                Password must be at least 8 characters long and differ from your current password.
+              </span>
+
+              <button
+                type="submit"
+                disabled={isPasswordLoading}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 rounded-xl text-xs font-bold shadow-md active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isPasswordLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Verifying & Updating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-3.5 h-3.5" />
+                    <span>Update Password</span>
                   </>
                 )}
               </button>

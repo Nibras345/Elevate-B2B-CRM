@@ -1,5 +1,6 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db';
 import authRoutes from './routes/authRoutes';
@@ -15,6 +16,9 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // Connect to MongoDB Database
 connectDB();
+
+// Request logging middleware
+app.use(morgan('dev'));
 
 // Middleware
 app.use(

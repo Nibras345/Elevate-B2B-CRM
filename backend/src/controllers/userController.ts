@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import bcrypt from 'bcryptjs';
 import { User } from '../models/User';
 import { AuthRequest } from '../types';
 
@@ -138,6 +139,7 @@ export const updateUserProfile = async (
       },
     });
   } catch (error) {
+    console.error("API Error Details:", error);
     next(error);
   }
 };
@@ -193,6 +195,104 @@ export const getUserProfile = async (
       },
     });
   } catch (error) {
+    console.error("API Error Details:", error);
     next(error);
   }
 };
+
+/**
+ * @route   PUT /api/users/change-password
+ * @desc    Change authenticated user's password with current password verification
+ * @access  Private (JWT Protected)
+ */
+export const changePassword = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    // Validate presence of required fields
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide both your current password and a new password.',
+      });
+      return;
+    }
+
+    // Validate minimum password length
+    if (newPassword.length < 8) {
+      res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters long.',
+      });
+      return;
+    }
+
+    // Extract user ID from authenticated request
+    const userId = req.user?.id || (req.user as any)?._id?.toString();
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized: User authentication required.',
+      });
+      return;
+    }
+
+    // Fetch user and explicitly select password field
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'User account not found.',
+      });
+      return;
+    }
+
+    if (!user.isActive) {
+      res.status(403).json({
+        success: false,
+        message: 'Your account is deactivated. Password updates are not permitted.',
+      });
+      return;
+    }
+
+    // Verify current password with bcrypt
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      res.status(400).json({
+        success: false,
+        message: 'Incorrect current password.',
+      });
+      return;
+    }
+
+    // Prevent re-using the same password
+    if (currentPassword === newPassword) {
+      res.status(400).json({
+        success: false,
+        message: 'New password must be different from your current password.',
+      });
+      return;
+    }
+
+    // Hash the new password with salt rounds of 10
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+
+    // Save updated password to user document
+    await user.save();
+
+    // Return success response
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully.',
+    });
+  } catch (error) {
+    console.error("API Error Details:", error);
+    next(error);
+  }
+};
+

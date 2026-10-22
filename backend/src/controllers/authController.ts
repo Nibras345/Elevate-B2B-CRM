@@ -116,6 +116,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       },
     });
   } catch (error) {
+    console.error("API Error Details:", error);
     next(error);
   }
 };
@@ -198,6 +199,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       tenant: tenantInfo,
     });
   } catch (error) {
+    console.error("API Error Details:", error);
     next(error);
   }
 };
@@ -222,6 +224,7 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
       tenant,
     });
   } catch (error) {
+    console.error("API Error Details:", error);
     next(error);
   }
 };
