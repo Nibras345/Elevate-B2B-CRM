@@ -134,16 +134,12 @@ export const SignIn: React.FC = () => {
                 <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
                   Password
                 </label>
-                <a
-                  href="#forgot"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    notify('Password reset instructions sent to registered email', 'info');
-                  }}
+                <Link
+                  to="/forgot-password"
                   className="text-xs text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
                 >
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3.5 top-3 text-slate-400 pointer-events-none" />

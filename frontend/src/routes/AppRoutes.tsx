@@ -4,6 +4,7 @@ import { PrivateRoute } from './PrivateRoute';
 import { ShellLayout } from '../components/layout/ShellLayout';
 import { SignIn } from '../pages/auth/SignIn';
 import { Register } from '../pages/auth/Register';
+import { ForgotPassword } from '../pages/auth/ForgotPassword';
 import { Dashboard } from '../pages/Dashboard';
 import { LeadsPipeline } from '../pages/LeadsPipeline';
 import { Clients } from '../pages/Clients';
@@ -16,6 +17,7 @@ export const AppRoutes: React.FC = () => {
       {/* Public Authentication Routes */}
       <Route path="/login" element={<SignIn />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Protected Multi-Tenant CRM Routes */}
       <Route element={<PrivateRoute />}>

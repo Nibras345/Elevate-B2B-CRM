@@ -1,7 +1,8 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User';
 import { AuthRequest } from '../types';
+import { sendOtpEmail } from '../utils/emailService';
 
 /**
  * @route   PUT /api/users/profile
@@ -295,4 +296,202 @@ export const changePassword = async (
     next(error);
   }
 };
+
+/**
+ * @route   POST /api/users/forgot-password
+ * @desc    Generate random 6-digit OTP, store with 10min expiry, and send via Nodemailer
+ * @access  Public
+ */
+export const forgotPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address.',
+      });
+      return;
+    }
+
+    const cleanEmail = email.toString().trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'No account found with this email address.',
+      });
+      return;
+    }
+
+    // Generate random 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // 10 minutes expiry from now
+    const resetOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.resetOtp = otp;
+    user.resetOtpExpiry = resetOtpExpiry;
+    await user.save();
+
+    // Send email using Nodemailer
+    try {
+      await sendOtpEmail(user.email, otp, user.name);
+    } catch (mailError) {
+      console.error('Nodemailer Transporter Error:', mailError);
+      res.status(500).json({
+        success: false,
+        message: 'Unable to send OTP verification email. Please check your email configuration.',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'A 6-digit OTP has been sent to your email address.',
+    });
+  } catch (error) {
+    console.error('forgotPassword error:', error);
+    next(error);
+  }
+};
+
+/**
+ * @route   POST /api/users/verify-otp
+ * @desc    Verify OTP and check expiry
+ * @access  Public
+ */
+export const verifyOtp = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      res.status(400).json({
+        success: false,
+        message: 'Email and 6-digit OTP are required.',
+      });
+      return;
+    }
+
+    const cleanEmail = email.toString().trim().toLowerCase();
+    const cleanOtp = otp.toString().trim();
+
+    const user = await User.findOne({ email: cleanEmail });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'No account found with this email address.',
+      });
+      return;
+    }
+
+    // Verify OTP matches and has not expired
+    if (
+      !user.resetOtp ||
+      user.resetOtp !== cleanOtp ||
+      !user.resetOtpExpiry ||
+      user.resetOtpExpiry.getTime() <= Date.now()
+    ) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid or Expired OTP',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully.',
+    });
+  } catch (error) {
+    console.error('verifyOtp error:', error);
+    next(error);
+  }
+};
+
+/**
+ * @route   POST /api/users/reset-password
+ * @desc    Verify OTP, hash newPassword using bcryptjs (salt round 10), and clear OTP fields
+ * @access  Public
+ */
+export const resetPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      res.status(400).json({
+        success: false,
+        message: 'Email, OTP, and new password are required.',
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long.',
+      });
+      return;
+    }
+
+    const cleanEmail = email.toString().trim().toLowerCase();
+    const cleanOtp = otp.toString().trim();
+
+    const user = await User.findOne({ email: cleanEmail }).select('+password');
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'User account not found.',
+      });
+      return;
+    }
+
+    // Verify OTP and expiry once more for security
+    if (
+      !user.resetOtp ||
+      user.resetOtp !== cleanOtp ||
+      !user.resetOtpExpiry ||
+      user.resetOtpExpiry.getTime() <= Date.now()
+    ) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid or Expired OTP',
+      });
+      return;
+    }
+
+    // Hash the newPassword using bcryptjs (salt round 10)
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+
+    // Clear both resetOtp and resetOtpExpiry fields
+    user.resetOtp = undefined;
+    user.resetOtpExpiry = undefined;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully. You can now log in with your new password.',
+    });
+  } catch (error) {
+    console.error('resetPassword error:', error);
+    next(error);
+  }
+};
+
 
