@@ -6,6 +6,7 @@ import { connectDB } from './config/db';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import teamRoutes from './routes/teamRoutes';
+import tenantRoutes from './routes/tenantRoutes';
 import { errorHandler } from './middleware/errorMiddleware';
 
 // Load environment variables
@@ -47,6 +48,8 @@ app.get('/api/health', (_req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/team', teamRoutes);
+app.use('/api/tenant', tenantRoutes);
+app.use('/api/tenants', tenantRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

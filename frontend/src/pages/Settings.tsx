@@ -83,6 +83,37 @@ export const Settings: React.FC = () => {
 
   const isAdmin = user.role === 'Company Admin' || (user.role as string) === 'Super Admin';
 
+  // Workspace Seat Statistics State
+  const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
+  const [isSeatStatsLoading, setIsSeatStatsLoading] = useState<boolean>(false);
+
+  const fetchSeatStats = async () => {
+    try {
+      setIsSeatStatsLoading(true);
+      const activeToken = localStorage.getItem('nexcrm_jwt_token');
+      if (!activeToken) return;
+
+      const response = await axios.get('/api/tenant/stats', {
+        headers: {
+          Authorization: `Bearer ${activeToken}`,
+        },
+      });
+
+      if (response.data.success) {
+        setSeatStats({
+          usedSeats: Number(response.data.usedSeats) || 0,
+          maxSeats: Number(response.data.maxSeats) || 25,
+        });
+      }
+    } catch (err) {
+      console.error('[Fetch Seat Stats Error]:', err);
+    } finally {
+      setIsSeatStatsLoading(false);
+    }
+  };
+
+  const isSeatLimitReached = seatStats.usedSeats >= seatStats.maxSeats;
+
   // Fetch Team Members from Route 2: GET /api/team
   const fetchTeamMembers = async () => {
     setIsTeamLoading(true);
@@ -107,10 +138,23 @@ export const Settings: React.FC = () => {
     }
   };
 
-  // Synchronize team data on initial mount and when Team tab is active
+  // Synchronize team & seat data on initial mount and when Team tab is active
   useEffect(() => {
     fetchTeamMembers();
+    fetchSeatStats();
   }, [activeTab]);
+
+  // Synchronize in real-time across tabs/components
+  useEffect(() => {
+    const handleSeatSync = () => {
+      fetchSeatStats();
+      fetchTeamMembers();
+    };
+    window.addEventListener('crm_seat_stats_updated', handleSeatSync);
+    return () => {
+      window.removeEventListener('crm_seat_stats_updated', handleSeatSync);
+    };
+  }, []);
 
   // Save Company Settings (Admin only)
   const handleSaveCompany = (e: FormEvent) => {
@@ -126,6 +170,11 @@ export const Settings: React.FC = () => {
   // Route 1: POST /api/team/invite
   const handleInviteUser = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSeatLimitReached) {
+      notify('Seat limit reached. Please upgrade your plan.', 'error');
+      return;
+    }
+
     if (!inviteForm.email.trim()) {
       notify('Please enter a valid email address.', 'error');
       return;
@@ -160,8 +209,10 @@ export const Settings: React.FC = () => {
           role: 'Sales Agent',
           department: 'Enterprise Sales',
         });
-        // Refresh team table
+        // Refresh team table and seat stats & notify sidebar
         await fetchTeamMembers();
+        await fetchSeatStats();
+        window.dispatchEvent(new Event('crm_seat_stats_updated'));
       } else {
         notify(response.data.message || 'Failed to send invitation.', 'error');
       }
@@ -194,6 +245,8 @@ export const Settings: React.FC = () => {
         notify(response.data.message || 'Member removed successfully', 'success');
         // Dynamically update state to remove row from table without reloading
         setTeam((prev) => prev.filter((m) => m.id !== id && (m as any)._id !== id));
+        fetchSeatStats();
+        window.dispatchEvent(new Event('crm_seat_stats_updated'));
       } else {
         notify(response.data.message || 'Failed to remove member.', 'error');
       }
@@ -423,9 +476,21 @@ export const Settings: React.FC = () => {
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Team Members & Seat Management
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Team Members & Seat Management
+                </h3>
+                <span
+                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${
+                    isSeatLimitReached
+                      ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900'
+                      : 'bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-950/40 dark:text-brand-300 dark:border-brand-900'
+                  }`}
+                  title={`${seatStats.usedSeats} of ${seatStats.maxSeats} allocated seats are currently in use`}
+                >
+                  Seats: {isSeatStatsLoading ? '...' : `${seatStats.usedSeats} / ${seatStats.maxSeats}`}
+                </span>
+              </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Manage roles, seat allocation, and invite colleagues to this tenant workspace
               </p>
@@ -434,24 +499,46 @@ export const Settings: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={fetchTeamMembers}
+                onClick={() => {
+                  fetchTeamMembers();
+                  fetchSeatStats();
+                }}
                 disabled={isTeamLoading}
                 className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Refresh Team List"
+                title="Refresh Team List & Seat Counts"
               >
                 <RefreshCw
-                  className={`w-4 h-4 ${isTeamLoading ? 'animate-spin text-brand-600' : ''}`}
+                  className={`w-4 h-4 ${isTeamLoading || isSeatStatsLoading ? 'animate-spin text-brand-600' : ''}`}
                 />
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsInviteModalOpen(true)}
-                className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Invite User</span>
-              </button>
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isSeatLimitReached) {
+                      notify('Seat limit reached. Please upgrade your plan.', 'error');
+                      return;
+                    }
+                    setIsInviteModalOpen(true);
+                  }}
+                  disabled={isSeatLimitReached}
+                  className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all ${
+                    isSeatLimitReached
+                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border border-slate-300 dark:border-slate-700'
+                      : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20 cursor-pointer'
+                  }`}
+                  title={isSeatLimitReached ? 'Seat limit reached. Please upgrade your plan.' : undefined}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Invite User</span>
+                </button>
+                {isSeatLimitReached && (
+                  <div className="absolute right-0 top-full mt-2 px-2.5 py-1 bg-slate-900 text-white text-[11px] rounded-md shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none">
+                    Seat limit reached. Please upgrade your plan.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -535,14 +622,33 @@ export const Settings: React.FC = () => {
                               Invite team members to collaborate on deals, pipelines, and invoices.
                             </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setIsInviteModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-sm cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Invite First Member</span>
-                          </button>
+                          <div className="relative group inline-block">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isSeatLimitReached) {
+                                  notify('Seat limit reached. Please upgrade your plan.', 'error');
+                                  return;
+                                }
+                                setIsInviteModalOpen(true);
+                              }}
+                              disabled={isSeatLimitReached}
+                              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all ${
+                                isSeatLimitReached
+                                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-300 dark:border-slate-700'
+                                  : 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer'
+                              }`}
+                              title={isSeatLimitReached ? 'Seat limit reached. Please upgrade your plan.' : undefined}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Invite First Member</span>
+                            </button>
+                            {isSeatLimitReached && (
+                              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2.5 py-1 bg-slate-900 text-white text-[11px] rounded-md shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none">
+                                Seat limit reached. Please upgrade your plan.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -663,6 +769,15 @@ export const Settings: React.FC = () => {
             maxWidth="max-w-md"
           >
             <form onSubmit={handleInviteUser} className="space-y-4">
+              {isSeatLimitReached && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>
+                    Seat limit reached ({seatStats.usedSeats} / {seatStats.maxSeats} seats). Please upgrade your plan to invite more members.
+                  </span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Email Address <span className="text-rose-500">*</span>
@@ -672,10 +787,11 @@ export const Settings: React.FC = () => {
                   <input
                     type="email"
                     required
+                    disabled={isSeatLimitReached || isInviting}
                     placeholder="colleague@yourcompany.com"
                     value={inviteForm.email}
                     onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -685,11 +801,12 @@ export const Settings: React.FC = () => {
                   Role Assignment <span className="text-rose-500">*</span>
                 </label>
                 <select
+                  disabled={isSeatLimitReached || isInviting}
                   value={inviteForm.role}
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, role: e.target.value as Role })
                   }
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer disabled:opacity-50"
                 >
                   <option value="Sales Agent">Sales Agent (Pipeline & Deals)</option>
                   <option value="Company Admin">Company Admin (Full Tenant Control)</option>
@@ -704,12 +821,13 @@ export const Settings: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  disabled={isSeatLimitReached || isInviting}
                   placeholder="e.g. Enterprise Sales, Support, Engineering"
                   value={inviteForm.department}
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, department: e.target.value })
                   }
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:opacity-50"
                 />
               </div>
 
@@ -724,8 +842,13 @@ export const Settings: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isInviting}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer disabled:opacity-60 transition-all"
+                  disabled={isInviting || isSeatLimitReached}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all ${
+                    isSeatLimitReached
+                      ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed shadow-none'
+                      : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20 cursor-pointer disabled:opacity-60'
+                  }`}
+                  title={isSeatLimitReached ? 'Seat limit reached. Please upgrade your plan.' : undefined}
                 >
                   {isInviting ? (
                     <>

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import {
   LayoutDashboard,
   KanbanSquare,
@@ -39,6 +40,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { user, tenantSettings } = useAuth();
   const location = useLocation();
+
+  // Dynamic Workspace Seat Statistics
+  const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
+  const [isLoadingSeats, setIsLoadingSeats] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fetchSeatStats = async () => {
+      try {
+        setIsLoadingSeats(true);
+        const token = localStorage.getItem('nexcrm_jwt_token');
+        if (!token) return;
+
+        const response = await axios.get('/api/tenant/stats', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.data.success) {
+          setSeatStats({
+            usedSeats: Number(response.data.usedSeats) || 0,
+            maxSeats: Number(response.data.maxSeats) || 25,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch tenant seat statistics:', error);
+      } finally {
+        setIsLoadingSeats(false);
+      }
+    };
+
+    fetchSeatStats();
+
+    // Real-time synchronization when members are invited or removed
+    const handleSeatUpdate = () => {
+      fetchSeatStats();
+    };
+
+    window.addEventListener('crm_seat_stats_updated', handleSeatUpdate);
+    return () => {
+      window.removeEventListener('crm_seat_stats_updated', handleSeatUpdate);
+    };
+  }, [user?.tenantId]);
 
   const navItems: NavItem[] = [
     {
@@ -200,11 +244,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </p>
               <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 font-medium pt-2 border-t border-slate-200/60 dark:border-slate-700/40">
                 <span>Seats in use</span>
-                <span className="font-semibold text-brand-600 dark:text-brand-400">18 / 25</span>
+                <span className="font-semibold text-brand-600 dark:text-brand-400">
+                  {isLoadingSeats ? '...' : `${seatStats.usedSeats} / ${seatStats.maxSeats}`}
+                </span>
               </div>
             </div>
           ) : (
-            <div className="flex justify-center p-2" title="Enterprise Multi-Tenant Active">
+            <div
+              className="flex justify-center p-2"
+              title={`Enterprise Multi-Tenant Active (${seatStats.usedSeats} / ${seatStats.maxSeats} seats)`}
+            >
               <ShieldCheck className="w-5 h-5 text-emerald-500" />
             </div>
           )}

@@ -71,7 +71,33 @@ export const inviteTeamMember = async (
       // If user exists but is NOT in this workspace, proceed with invitation (multi-tenant support)
     }
 
-    // 2. Generate a secure crypto token
+    // 2. Enforce Workspace Seat Limit
+    const tenantDoc = await Tenant.findOne({ tenantId: currentTenantId });
+    const maxSeats = tenantDoc?.maxSeats ?? 25;
+
+    const activeUsersCount = await User.countDocuments({
+      $or: [
+        { tenantId: currentTenantId },
+        { tenantIds: currentTenantId },
+        { 'workspaces.tenantId': currentTenantId },
+      ],
+      isActive: { $ne: false },
+    });
+
+    const pendingInvitesCount = await Invitation.countDocuments({
+      tenantId: currentTenantId,
+      email: { $ne: normalizedEmail },
+    });
+
+    if (activeUsersCount + pendingInvitesCount >= maxSeats) {
+      res.status(400).json({
+        success: false,
+        message: 'Seat limit reached. Please upgrade your plan.',
+      });
+      return;
+    }
+
+    // 3. Generate a secure crypto token
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days expiration
 

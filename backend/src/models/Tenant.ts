@@ -3,6 +3,7 @@ import mongoose, { Document, Schema, Model } from 'mongoose';
 export interface ITenant extends Document {
   name: string;
   tenantId: string;
+  maxSeats: number;
   logoUrl?: string;
   currency: string;
   fiscalYear: string;
@@ -28,6 +29,11 @@ const TenantSchema: Schema<ITenant> = new Schema(
       trim: true,
       uppercase: true,
       index: true,
+    },
+    maxSeats: {
+      type: Number,
+      default: 25,
+      min: [1, 'A tenant must have at least 1 seat'],
     },
     logoUrl: {
       type: String,
