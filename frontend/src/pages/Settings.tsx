@@ -343,7 +343,7 @@ export const Settings: React.FC = () => {
               className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Invite User</span>
+              <span>Invite Member</span>
             </button>
           </div>
 
