@@ -174,32 +174,32 @@ export const Settings: React.FC = () => {
     }
   };
 
-  // Route 4: DELETE /api/team/:id
-  const handleRemoveMember = async (id: string, name: string) => {
+  // Route 4: DELETE /api/team/remove/:id
+  const handleRemoveMember = async (id: string) => {
     const isConfirmed = window.confirm(
-      `Are you sure you want to remove '${name}' from this workspace?`
+      "Are you sure you want to remove this member from your workspace?"
     );
     if (!isConfirmed) return;
 
     setDeletingMemberId(id);
     try {
       const activeToken = localStorage.getItem('nexcrm_jwt_token');
-      const response = await axios.delete(`/api/team/${id}`, {
+      const response = await axios.delete(`/api/team/remove/${id}`, {
         headers: {
           Authorization: `Bearer ${activeToken}`,
         },
       });
 
       if (response.data.success) {
-        notify(response.data.message || `Removed ${name} from tenant workspace`, 'info');
-        // Optimistically update list
+        notify(response.data.message || 'Member removed successfully', 'success');
+        // Dynamically update state to remove row from table without reloading
         setTeam((prev) => prev.filter((m) => m.id !== id && (m as any)._id !== id));
       } else {
-        notify(response.data.message || 'Failed to delete team member.', 'error');
+        notify(response.data.message || 'Failed to remove member.', 'error');
       }
     } catch (err: any) {
       const errMsg =
-        err.response?.data?.message || 'Server error while removing team member.';
+        err.response?.data?.message || 'Server error while removing member.';
       notify(errMsg, 'error');
     } finally {
       setDeletingMemberId(null);
@@ -627,7 +627,7 @@ export const Settings: React.FC = () => {
                           ) : isAdmin ? (
                             <button
                               type="button"
-                              onClick={() => handleRemoveMember(memberId, member.name)}
+                              onClick={() => handleRemoveMember(memberId)}
                               disabled={deletingMemberId === memberId}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer disabled:opacity-50"
                               title={

@@ -25,7 +25,8 @@ router.post('/invite', protect, tenantGuard, authorizeRoles('Company Admin', 'Su
 // Route 2: GET /api/team
 router.get('/', protect, tenantGuard, getTeamMembers);
 
-// Route 4: DELETE /api/team/:id
+// Route 4: DELETE /api/team/remove/:id (with /:id alias for backward compatibility)
+router.delete('/remove/:id', protect, tenantGuard, authorizeRoles('Company Admin', 'Super Admin'), removeTeamMember);
 router.delete('/:id', protect, tenantGuard, authorizeRoles('Company Admin', 'Super Admin'), removeTeamMember);
 
 export default router;

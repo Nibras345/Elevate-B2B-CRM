@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Invitation } from '../models/Invitation';
 import { Tenant } from '../models/Tenant';
@@ -523,8 +524,8 @@ export const acceptInvite = async (
 };
 
 /**
- * @route   DELETE /api/team/:id
- * @desc    Delete a team member or cancel a pending invitation
+ * @route   DELETE /api/team/remove/:id (also aliased at DELETE /api/team/:id)
+ * @desc    Remove a member from the workspace using $pull or cancel a pending invitation
  * @access  Private (JWT Protected, Company Admin / Super Admin)
  */
 export const removeTeamMember = async (
@@ -544,11 +545,20 @@ export const removeTeamMember = async (
       return;
     }
 
-    // Admin privileges check
+    // Verify Admin privileges for current tenant
     if (req.user?.role !== 'Company Admin' && req.user?.role !== 'Super Admin') {
       res.status(403).json({
         success: false,
         message: 'Access Denied: Only Company Admins have permission to remove members or cancel invites.',
+      });
+      return;
+    }
+
+    // Validate ID format
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid member or invitation identifier provided.',
       });
       return;
     }
@@ -558,12 +568,12 @@ export const removeTeamMember = async (
     if (id === currentUserId) {
       res.status(400).json({
         success: false,
-        message: 'Security Guard: You cannot delete your own active administrator account.',
+        message: 'Security Guard: You cannot remove your own active administrator account.',
       });
       return;
     }
 
-    // 1. Check if ID matches an invitation
+    // 1. Check if ID belongs to an Invitation in this tenant
     const deletedInvite = await Invitation.findOneAndDelete({
       _id: id,
       tenantId: currentTenantId,
@@ -572,12 +582,12 @@ export const removeTeamMember = async (
     if (deletedInvite) {
       res.status(200).json({
         success: true,
-        message: `Pending invitation for '${deletedInvite.email}' has been cancelled.`,
+        message: 'Member removed successfully',
       });
       return;
     }
 
-    // 2. Check if ID matches a user in this tenant
+    // 2. Check if ID belongs to a registered User in this workspace
     const targetUser = await User.findOne({
       _id: id,
       $or: [
@@ -595,29 +605,48 @@ export const removeTeamMember = async (
       return;
     }
 
-    // If user belongs to multiple workspaces, remove this workspace from their list instead of deleting account
-    if (targetUser.workspaces && targetUser.workspaces.length > 1) {
-      targetUser.workspaces = targetUser.workspaces.filter(
-        (w) => w.tenantId !== currentTenantId
-      );
-      if (targetUser.tenantIds) {
-        targetUser.tenantIds = targetUser.tenantIds.filter((t) => t !== currentTenantId);
+    // Do NOT delete the entire user document (as they might be part of other tenants).
+    // Instead, use $pull to remove currentTenantId and workspace entry
+    const remainingWorkspaces =
+      targetUser.workspaces?.filter((w) => w.tenantId !== currentTenantId) || [];
+
+    let fallbackTenantId = targetUser.tenantId;
+    let fallbackTenant = targetUser.tenant;
+    let fallbackRole = targetUser.role;
+    let fallbackDept = targetUser.department;
+
+    if (targetUser.tenantId === currentTenantId) {
+      if (remainingWorkspaces.length > 0) {
+        fallbackTenantId = remainingWorkspaces[0].tenantId;
+        fallbackTenant = remainingWorkspaces[0].tenant;
+        fallbackRole = remainingWorkspaces[0].role;
+        fallbackDept = remainingWorkspaces[0].department;
+      } else {
+        fallbackTenantId = '';
+        fallbackTenant = undefined;
       }
-      // If their primary tenant was this one, switch active context to their first remaining workspace
-      if (targetUser.tenantId === currentTenantId && targetUser.workspaces.length > 0) {
-        targetUser.tenantId = targetUser.workspaces[0].tenantId;
-        targetUser.tenant = targetUser.workspaces[0].tenant;
-        targetUser.role = targetUser.workspaces[0].role;
-        targetUser.department = targetUser.workspaces[0].department;
-      }
-      await targetUser.save();
-    } else {
-      await User.findByIdAndDelete(targetUser._id);
     }
+
+    await User.findByIdAndUpdate(
+      targetUser._id,
+      {
+        $pull: {
+          tenantIds: currentTenantId,
+          workspaces: { tenantId: currentTenantId },
+        },
+        $set: {
+          tenantId: fallbackTenantId,
+          tenant: fallbackTenant,
+          role: fallbackRole,
+          department: fallbackDept,
+        },
+      },
+      { new: true }
+    );
 
     res.status(200).json({
       success: true,
-      message: `Team member '${targetUser.name}' (${targetUser.email}) has been successfully removed from this workspace.`,
+      message: 'Member removed successfully',
     });
   } catch (error: any) {
     next(error);
