@@ -76,15 +76,20 @@ export interface Invoice {
 
 export interface TeamMember {
   id: string;
+  _id?: string;
   name: string;
   email: string;
   role: Role;
   department: string;
   status: 'Active' | 'Invited';
   avatar: string;
-  phone: string;
-  leadsCount: number;
-  closedValue: string;
+  phone?: string;
+  leadsCount?: number;
+  closedValue?: string;
+  closedRevenue?: string;
+  type?: 'user' | 'invitation';
+  expiresAt?: string;
+  createdAt?: string;
 }
 
 export interface UserProfile {

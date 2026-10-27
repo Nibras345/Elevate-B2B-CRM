@@ -2,6 +2,15 @@ import mongoose, { Document, Schema, Model, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { UserRole } from '../types';
 
+export interface IUserWorkspace {
+  tenantId: string;
+  tenant?: Types.ObjectId;
+  role: UserRole;
+  department?: string;
+  status: 'Invited' | 'Active';
+  joinedAt?: Date;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -9,11 +18,15 @@ export interface IUser extends Document {
   role: UserRole;
   tenantId: string;
   tenant?: Types.ObjectId;
+  tenantIds: string[];
+  tenants: Types.ObjectId[];
+  workspaces: IUserWorkspace[];
   avatar?: string;
   profilePicture?: string;
   department?: string;
   phone?: string;
   isActive: boolean;
+  status: 'Invited' | 'Active';
   resetOtp?: string;
   resetOtpExpiry?: Date;
   createdAt: Date;
@@ -57,6 +70,48 @@ const UserSchema: Schema<IUser> = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Tenant',
     },
+    tenantIds: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+    tenants: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Tenant',
+      },
+    ],
+    workspaces: [
+      {
+        tenantId: {
+          type: String,
+          required: true,
+          index: true,
+        },
+        tenant: {
+          type: Schema.Types.ObjectId,
+          ref: 'Tenant',
+        },
+        role: {
+          type: String,
+          enum: ['Company Admin', 'Employee', 'Sales Agent', 'Support', 'Super Admin'],
+          default: 'Sales Agent',
+        },
+        department: {
+          type: String,
+          default: 'General',
+        },
+        status: {
+          type: String,
+          enum: ['Invited', 'Active'],
+          default: 'Active',
+        },
+        joinedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     avatar: {
       type: String,
       default: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
@@ -77,6 +132,12 @@ const UserSchema: Schema<IUser> = new Schema(
       type: Boolean,
       default: true,
     },
+    status: {
+      type: String,
+      enum: ['Invited', 'Active'],
+      default: 'Active',
+      index: true,
+    },
     resetOtp: {
       type: String,
       default: null,
@@ -91,8 +152,44 @@ const UserSchema: Schema<IUser> = new Schema(
   }
 );
 
-// Hash password before saving
+// Pre-save hook: Sync tenant arrays & hash password
 UserSchema.pre<IUser>('save', async function () {
+  // Sync tenantIds array with tenantId
+  if (this.tenantId) {
+    if (!this.tenantIds) {
+      this.tenantIds = [];
+    }
+    if (!this.tenantIds.includes(this.tenantId)) {
+      this.tenantIds.push(this.tenantId);
+    }
+  }
+
+  // Sync tenants ObjectId array with tenant
+  if (this.tenant) {
+    if (!this.tenants) {
+      this.tenants = [];
+    }
+    const tenantStr = this.tenant.toString();
+    if (!this.tenants.some((t) => t.toString() === tenantStr)) {
+      this.tenants.push(this.tenant);
+    }
+  }
+
+  // Sync workspaces subdocuments array
+  if (!this.workspaces) {
+    this.workspaces = [];
+  }
+  if (this.tenantId && !this.workspaces.some((w) => w.tenantId === this.tenantId)) {
+    this.workspaces.push({
+      tenantId: this.tenantId,
+      tenant: this.tenant,
+      role: this.role || 'Company Admin',
+      department: this.department || 'General',
+      status: this.status || 'Active',
+      joinedAt: new Date(),
+    });
+  }
+
   if (!this.isModified('password')) {
     return;
   }

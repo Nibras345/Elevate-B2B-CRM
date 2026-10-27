@@ -47,6 +47,12 @@ export const protect = async (
       return;
     }
 
+    // Resolve active tenant and role for this session
+    const activeTenantId = decoded.tenantId || currentUser.tenantId;
+    const activeWorkspace = currentUser.workspaces?.find((w) => w.tenantId === activeTenantId);
+    const activeRole = activeWorkspace?.role || decoded.role || currentUser.role;
+    const activeDept = activeWorkspace?.department || currentUser.department;
+
     // Attach user and tenant info to request
     req.user = {
       id: currentUser._id.toString(),
@@ -54,16 +60,18 @@ export const protect = async (
       name: currentUser.name,
       fullName: currentUser.name,
       email: currentUser.email,
-      role: currentUser.role,
-      tenantId: currentUser.tenantId,
+      role: activeRole,
+      tenantId: activeTenantId,
+      tenantIds: currentUser.tenantIds,
+      workspaces: currentUser.workspaces as any,
       companyName: (currentUser as any).tenant?.name,
       avatar: currentUser.profilePicture || currentUser.avatar,
       profilePicture: currentUser.profilePicture || currentUser.avatar,
       phone: currentUser.phone || '',
-      department: currentUser.department,
+      department: activeDept,
       isActive: currentUser.isActive,
     };
-    req.tenantId = currentUser.tenantId;
+    req.tenantId = activeTenantId;
 
     next();
   } catch (error: any) {

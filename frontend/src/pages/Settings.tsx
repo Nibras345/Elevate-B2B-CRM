@@ -1,5 +1,6 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 import {
   User,
   Building,
@@ -11,8 +12,11 @@ import {
   Plus,
   Trash2,
   ShieldAlert,
+  Loader2,
+  RefreshCw,
+  Mail,
+  UserX,
 } from 'lucide-react';
-import { initialTeamMembers } from '../data/mockData';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { useAuth } from '../context/AuthContext';
@@ -54,11 +58,15 @@ export const Settings: React.FC = () => {
     website: tenantSettings?.website || 'https://apexhorizon.com',
   });
 
-  // Team Members State
-  const [team, setTeam] = useState<TeamMember[]>(initialTeamMembers);
+  // Team Members Dynamic State
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [isTeamLoading, setIsTeamLoading] = useState<boolean>(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
+
   const [inviteForm, setInviteForm] = useState({
-    name: '',
     email: '',
     role: 'Sales Agent' as Role,
     department: 'Enterprise Sales',
@@ -73,7 +81,36 @@ export const Settings: React.FC = () => {
     weeklyReport: false,
   });
 
-  const isAdmin = user.role === 'Company Admin';
+  const isAdmin = user.role === 'Company Admin' || (user.role as string) === 'Super Admin';
+
+  // Fetch Team Members from Route 2: GET /api/team
+  const fetchTeamMembers = async () => {
+    setIsTeamLoading(true);
+    setTeamError(null);
+    try {
+      const activeToken = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.get('/api/team', {
+        headers: {
+          Authorization: `Bearer ${activeToken}`,
+        },
+      });
+
+      if (response.data.success && Array.isArray(response.data.team)) {
+        setTeam(response.data.team);
+      }
+    } catch (err: any) {
+      const errMsg = err.response?.data?.message || 'Failed to retrieve team members.';
+      setTeamError(errMsg);
+      console.error('[Fetch Team Error]:', err);
+    } finally {
+      setIsTeamLoading(false);
+    }
+  };
+
+  // Synchronize team data on initial mount and when Team tab is active
+  useEffect(() => {
+    fetchTeamMembers();
+  }, [activeTab]);
 
   // Save Company Settings (Admin only)
   const handleSaveCompany = (e: FormEvent) => {
@@ -86,31 +123,87 @@ export const Settings: React.FC = () => {
     notify(`Company tenant settings saved for ${companyForm.companyName}`, 'success');
   };
 
-  // Invite Team Member
-  const handleInviteUser = (e: FormEvent) => {
+  // Route 1: POST /api/team/invite
+  const handleInviteUser = async (e: FormEvent) => {
     e.preventDefault();
-    const newMember: TeamMember = {
-      id: `team-${Date.now()}`,
-      name: inviteForm.name,
-      email: inviteForm.email,
-      role: inviteForm.role,
-      department: inviteForm.department,
-      status: 'Invited',
-      avatar: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80`,
-      phone: '+1 (555) 000-0000',
-      leadsCount: 0,
-      closedValue: '$0',
-    };
-    setTeam([...team, newMember]);
-    setIsInviteModalOpen(false);
-    setInviteForm({ name: '', email: '', role: 'Sales Agent', department: 'Enterprise Sales' });
-    notify(`Invitation sent to ${newMember.email} as ${newMember.role}`, 'success');
+    if (!inviteForm.email.trim()) {
+      notify('Please enter a valid email address.', 'error');
+      return;
+    }
+
+    setIsInviting(true);
+    try {
+      const activeToken = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.post(
+        '/api/team/invite',
+        {
+          email: inviteForm.email.trim(),
+          role: inviteForm.role,
+          department: inviteForm.department.trim() || 'General',
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${activeToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        notify(
+          response.data.message || `Invitation successfully sent to ${inviteForm.email}`,
+          'success'
+        );
+        setIsInviteModalOpen(false);
+        setInviteForm({
+          email: '',
+          role: 'Sales Agent',
+          department: 'Enterprise Sales',
+        });
+        // Refresh team table
+        await fetchTeamMembers();
+      } else {
+        notify(response.data.message || 'Failed to send invitation.', 'error');
+      }
+    } catch (err: any) {
+      const errMsg =
+        err.response?.data?.message || 'Server error while sending invitation email.';
+      notify(errMsg, 'error');
+    } finally {
+      setIsInviting(false);
+    }
   };
 
-  // Remove team member
-  const handleRemoveMember = (id: string, name: string) => {
-    setTeam(prev => prev.filter(m => m.id !== id));
-    notify(`Removed ${name} from tenant workspace`, 'info');
+  // Route 4: DELETE /api/team/:id
+  const handleRemoveMember = async (id: string, name: string) => {
+    const isConfirmed = window.confirm(
+      `Are you sure you want to remove '${name}' from this workspace?`
+    );
+    if (!isConfirmed) return;
+
+    setDeletingMemberId(id);
+    try {
+      const activeToken = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.delete(`/api/team/${id}`, {
+        headers: {
+          Authorization: `Bearer ${activeToken}`,
+        },
+      });
+
+      if (response.data.success) {
+        notify(response.data.message || `Removed ${name} from tenant workspace`, 'info');
+        // Optimistically update list
+        setTeam((prev) => prev.filter((m) => m.id !== id && (m as any)._id !== id));
+      } else {
+        notify(response.data.message || 'Failed to delete team member.', 'error');
+      }
+    } catch (err: any) {
+      const errMsg =
+        err.response?.data?.message || 'Server error while removing team member.';
+      notify(errMsg, 'error');
+    } finally {
+      setDeletingMemberId(null);
+    }
   };
 
   return (
@@ -334,18 +427,49 @@ export const Settings: React.FC = () => {
                 Team Members & Seat Management
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Manage roles, pipeline visibility, and invite team members to this tenant
+                Manage roles, seat allocation, and invite colleagues to this tenant workspace
               </p>
             </div>
 
-            <button
-              onClick={() => setIsInviteModalOpen(true)}
-              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Invite Member</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={fetchTeamMembers}
+                disabled={isTeamLoading}
+                className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Refresh Team List"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${isTeamLoading ? 'animate-spin text-brand-600' : ''}`}
+                />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(true)}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Invite User</span>
+              </button>
+            </div>
           </div>
+
+          {/* Team error notification banner if fetch failed */}
+          {teamError && (
+            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{teamError}</span>
+              </div>
+              <button
+                onClick={fetchTeamMembers}
+                className="font-semibold underline hover:text-rose-900 cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -361,79 +485,170 @@ export const Settings: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {team.map((member) => (
-                    <tr key={member.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-6">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={member.avatar}
-                            alt={member.name}
-                            className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
-                          />
-                          <div>
-                            <span className="font-bold text-slate-900 dark:text-white block">
-                              {member.name}
-                            </span>
-                            <span className="text-[11px] text-slate-400 block">{member.email}</span>
+                  {/* Loading State */}
+                  {isTeamLoading && team.length === 0 && (
+                    <>
+                      {[1, 2, 3].map((skeletonIdx) => (
+                        <tr key={skeletonIdx} className="animate-pulse">
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800" />
+                              <div className="space-y-1.5">
+                                <div className="w-28 h-3.5 bg-slate-200 dark:bg-slate-800 rounded" />
+                                <div className="w-36 h-2.5 bg-slate-100 dark:bg-slate-800/60 rounded" />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="w-20 h-5 bg-slate-200 dark:bg-slate-800 rounded-full" />
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="w-24 h-3.5 bg-slate-200 dark:bg-slate-800 rounded" />
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="w-16 h-4 bg-slate-200 dark:bg-slate-800 rounded-full" />
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="w-12 h-3.5 bg-slate-200 dark:bg-slate-800 rounded" />
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <div className="w-6 h-6 bg-slate-200 dark:bg-slate-800 rounded ml-auto" />
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Empty State */}
+                  {!isTeamLoading && team.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-12 px-6 text-center">
+                        <div className="max-w-xs mx-auto space-y-3">
+                          <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 flex items-center justify-center mx-auto">
+                            <Users className="w-6 h-6" />
                           </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                              No Colleagues Found
+                            </h4>
+                            <p className="text-xs text-slate-400 mt-1">
+                              Invite team members to collaborate on deals, pipelines, and invoices.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsInviteModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-sm cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Invite First Member</span>
+                          </button>
                         </div>
                       </td>
-
-                      <td className="py-3.5 px-4">
-                        <Badge
-                          variant={
-                            member.role === 'Company Admin'
-                              ? 'primary'
-                              : member.role === 'Support'
-                              ? 'purple'
-                              : 'neutral'
-                          }
-                          size="sm"
-                        >
-                          {member.role}
-                        </Badge>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
-                        {member.department}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                            member.status === 'Active'
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                              : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              member.status === 'Active' ? 'bg-emerald-500' : 'bg-amber-500'
-                            }`}
-                          />
-                          {member.status}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200">
-                        {member.closedValue}
-                      </td>
-
-                      <td className="py-3.5 px-6 text-right">
-                        {member.id !== 'team-1' ? (
-                          <button
-                            onClick={() => handleRemoveMember(member.id, member.name)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                            title="Remove Member"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 italic">Primary Admin</span>
-                        )}
-                      </td>
                     </tr>
-                  ))}
+                  )}
+
+                  {/* Dynamic Rows */}
+                  {team.map((member) => {
+                    const memberId = member.id || (member as any)._id;
+                    const isCurrentUser =
+                      member.email.toLowerCase() === user.email.toLowerCase() ||
+                      memberId === user.id;
+
+                    return (
+                      <tr
+                        key={memberId}
+                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="py-3.5 px-6">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={
+                                member.avatar ||
+                                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+                              }
+                              alt={member.name}
+                              className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+                            />
+                            <div>
+                              <span className="font-bold text-slate-900 dark:text-white block">
+                                {member.name || member.email.split('@')[0]}
+                              </span>
+                              <span className="text-[11px] text-slate-400 block">
+                                {member.email}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <Badge
+                            variant={
+                              member.role === 'Company Admin'
+                                ? 'primary'
+                                : member.role === 'Support'
+                                ? 'purple'
+                                : 'neutral'
+                            }
+                            size="sm"
+                          >
+                            {member.role}
+                          </Badge>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
+                          {member.department || 'General'}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                              member.status === 'Active'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                member.status === 'Active' ? 'bg-emerald-500' : 'bg-amber-500'
+                              }`}
+                            />
+                            {member.status}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200">
+                          {member.closedRevenue || member.closedValue || '$0'}
+                        </td>
+
+                        <td className="py-3.5 px-6 text-right">
+                          {isCurrentUser ? (
+                            <span className="text-[10px] text-slate-400 italic">You (Current)</span>
+                          ) : isAdmin ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMember(memberId, member.name)}
+                              disabled={deletingMemberId === memberId}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer disabled:opacity-50"
+                              title={
+                                member.status === 'Invited'
+                                  ? 'Cancel Pending Invitation'
+                                  : 'Remove Colleague'
+                              }
+                            >
+                              {deletingMemberId === memberId ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Protected</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -444,50 +659,42 @@ export const Settings: React.FC = () => {
             isOpen={isInviteModalOpen}
             onClose={() => setIsInviteModalOpen(false)}
             title="Invite New Colleague"
-            subtitle="Grant tenant pipeline access and allocate seat licenses"
+            subtitle="Send an email invitation link with tenant pipeline access"
             maxWidth="max-w-md"
           >
             <form onSubmit={handleInviteUser} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Full Name
+                  Email Address <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Samuel Vance"
-                  value={inviteForm.name}
-                  onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                />
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="colleague@yourcompany.com"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Work Email Address
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="samuel@apexhorizon.com"
-                  value={inviteForm.email}
-                  onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Role Assignment
+                  Role Assignment <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={inviteForm.role}
-                  onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value as Role })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                  onChange={(e) =>
+                    setInviteForm({ ...inviteForm, role: e.target.value as Role })
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
                 >
                   <option value="Sales Agent">Sales Agent (Pipeline & Deals)</option>
                   <option value="Company Admin">Company Admin (Full Tenant Control)</option>
                   <option value="Support">Support (Read-only Clients & Invoices)</option>
+                  <option value="Employee">Employee (Standard Access)</option>
                 </select>
               </div>
 
@@ -497,9 +704,12 @@ export const Settings: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  placeholder="e.g. Enterprise Sales, Support, Engineering"
                   value={inviteForm.department}
-                  onChange={(e) => setInviteForm({ ...inviteForm, department: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                  onChange={(e) =>
+                    setInviteForm({ ...inviteForm, department: e.target.value })
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                 />
               </div>
 
@@ -507,15 +717,24 @@ export const Settings: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 cursor-pointer"
+                  disabled={isInviting}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer"
+                  disabled={isInviting}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 cursor-pointer disabled:opacity-60 transition-all"
                 >
-                  Send Invitation
+                  {isInviting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Sending Invite...</span>
+                    </>
+                  ) : (
+                    <span>Send Invite</span>
+                  )}
                 </button>
               </div>
             </form>

@@ -10,6 +10,15 @@ export interface JwtPayload {
   tenantId: string;
 }
 
+export interface UserWorkspace {
+  tenantId: string;
+  tenant?: Types.ObjectId | string;
+  role: UserRole;
+  department?: string;
+  status: 'Invited' | 'Active';
+  joinedAt?: Date;
+}
+
 export interface AuthenticatedUser {
   id?: string;
   _id: Types.ObjectId | string;
@@ -18,12 +27,15 @@ export interface AuthenticatedUser {
   email: string;
   role: UserRole;
   tenantId: string;
+  tenantIds?: string[];
+  workspaces?: UserWorkspace[];
   companyName?: string;
   avatar?: string;
   profilePicture?: string;
   phone?: string;
   department?: string;
   isActive: boolean;
+  status?: 'Invited' | 'Active';
 }
 
 export interface AuthRequest extends Request {

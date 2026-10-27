@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
+import teamRoutes from './routes/teamRoutes';
 import { errorHandler } from './middleware/errorMiddleware';
 
 // Load environment variables
@@ -15,7 +16,7 @@ const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // Connect to MongoDB Database
-connectDB();
+await connectDB();
 
 // Request logging middleware
 app.use(morgan('dev'));
@@ -45,6 +46,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/team', teamRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

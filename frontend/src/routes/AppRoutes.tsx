@@ -5,6 +5,7 @@ import { ShellLayout } from '../components/layout/ShellLayout';
 import { SignIn } from '../pages/auth/SignIn';
 import { Register } from '../pages/auth/Register';
 import { ForgotPassword } from '../pages/auth/ForgotPassword';
+import { AcceptInvite } from '../pages/auth/AcceptInvite';
 import { Dashboard } from '../pages/Dashboard';
 import { LeadsPipeline } from '../pages/LeadsPipeline';
 import { Clients } from '../pages/Clients';
@@ -18,6 +19,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/login" element={<SignIn />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/invite/accept/:token" element={<AcceptInvite />} />
 
       {/* Protected Multi-Tenant CRM Routes */}
       <Route element={<PrivateRoute />}>

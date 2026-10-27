@@ -182,3 +182,222 @@ export const sendOtpEmail = async (
 
   await transporter.sendMail(mailOptions);
 };
+
+/**
+ * Sends a modern, enterprise team invitation email with acceptance link
+ * @param to - Recipient email address
+ * @param inviteLink - Full acceptance URL with unique token
+ * @param role - Assigned CRM role
+ * @param department - Assigned department
+ * @param companyName - Name of the inviting tenant / company
+ * @param senderName - Name of the administrator who invited them
+ */
+export const sendInvitationEmail = async (
+  to: string,
+  inviteLink: string,
+  role: string,
+  department: string,
+  companyName: string = 'Enterprise Workspace',
+  senderName: string = 'Your Workspace Administrator'
+): Promise<void> => {
+  const senderEmail = process.env.SMTP_EMAIL;
+
+  const mailOptions = {
+    from: `"${companyName} via NexSphere CRM" <${senderEmail}>`,
+    to,
+    subject: `You've been invited to join ${companyName} on NexSphere CRM`,
+    text: `Hello,\n\n${senderName} has invited you to join the ${companyName} team on NexSphere CRM as a ${role} (${department}).\n\nPlease click the following link to set up your account and password:\n${inviteLink}\n\nThis invitation link will expire in 7 days.\n\nBest regards,\n${companyName} Team`,
+    html: `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Team Invitation - NexSphere CRM</title>
+      <style>
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          background-color: #f1f5f9;
+          color: #1e293b;
+        }
+        .container {
+          max-width: 560px;
+          margin: 40px auto;
+          background: #ffffff;
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+          border: 1px solid #e2e8f0;
+        }
+        .header {
+          background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+          padding: 36px 32px;
+          text-align: center;
+          color: #ffffff;
+        }
+        .header-badge {
+          display: inline-block;
+          background: rgba(255, 255, 255, 0.15);
+          color: #c7d2fe;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          padding: 4px 12px;
+          border-radius: 20px;
+          margin-bottom: 12px;
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 24px;
+          font-weight: 800;
+          letter-spacing: -0.5px;
+        }
+        .header p {
+          margin: 8px 0 0;
+          font-size: 14px;
+          color: #e0e7ff;
+        }
+        .content {
+          padding: 36px 32px;
+        }
+        .greeting {
+          font-size: 18px;
+          font-weight: 700;
+          color: #0f172a;
+          margin-bottom: 12px;
+        }
+        .intro-text {
+          font-size: 14px;
+          line-height: 1.6;
+          color: #475569;
+          margin-bottom: 24px;
+        }
+        .invite-card {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 20px;
+          margin-bottom: 28px;
+        }
+        .invite-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 8px 0;
+          border-bottom: 1px dashed #e2e8f0;
+          font-size: 13px;
+        }
+        .invite-row:last-child {
+          border-bottom: none;
+        }
+        .invite-label {
+          color: #64748b;
+          font-weight: 500;
+        }
+        .invite-value {
+          color: #0f172a;
+          font-weight: 600;
+        }
+        .btn-container {
+          text-align: center;
+          margin: 32px 0 24px;
+        }
+        .btn {
+          display: inline-block;
+          background: #4338ca;
+          color: #ffffff !important;
+          text-decoration: none;
+          font-weight: 600;
+          font-size: 15px;
+          padding: 14px 32px;
+          border-radius: 10px;
+          box-shadow: 0 4px 14px 0 rgba(67, 56, 202, 0.39);
+        }
+        .btn:hover {
+          background: #3730a3;
+        }
+        .expiry-note {
+          text-align: center;
+          font-size: 12px;
+          color: #ef4444;
+          font-weight: 500;
+          margin-top: 12px;
+        }
+        .fallback-box {
+          background: #f8fafc;
+          border-radius: 8px;
+          padding: 12px;
+          margin-top: 24px;
+          word-break: break-all;
+          font-size: 11px;
+          color: #64748b;
+          line-height: 1.4;
+        }
+        .footer {
+          border-top: 1px solid #f1f5f9;
+          background: #f8fafc;
+          padding: 24px 32px;
+          font-size: 12px;
+          color: #94a3b8;
+          text-align: center;
+          line-height: 1.5;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <span class="header-badge">Team Invitation</span>
+          <h1>Join ${companyName}</h1>
+          <p>You're invited to collaborate on NexSphere B2B CRM</p>
+        </div>
+        <div class="content">
+          <div class="greeting">Welcome aboard!</div>
+          <p class="intro-text">
+            <strong>${senderName}</strong> has invited you to join the <strong>${companyName}</strong> workspace on NexSphere CRM. You have been granted access to your organization's deals pipeline, client directories, and collaboration tools.
+          </p>
+
+          <div class="invite-card">
+            <div class="invite-row">
+              <span class="invite-label">Organization / Tenant</span>
+              <span class="invite-value">${companyName}</span>
+            </div>
+            <div class="invite-row">
+              <span class="invite-label">Assigned Role</span>
+              <span class="invite-value">${role}</span>
+            </div>
+            <div class="invite-row">
+              <span class="invite-label">Department</span>
+              <span class="invite-value">${department || 'General'}</span>
+            </div>
+            <div class="invite-row">
+              <span class="invite-label">Invited Email</span>
+              <span class="invite-value">${to}</span>
+            </div>
+          </div>
+
+          <div class="btn-container">
+            <a href="${inviteLink}" class="btn" target="_blank">Accept Invitation & Activate Seat</a>
+            <div class="expiry-note">⚡ This invitation link expires in 7 days</div>
+          </div>
+
+          <div class="fallback-box">
+            <strong>Having trouble with the button?</strong> Copy and paste this link into your browser:<br>
+            <a href="${inviteLink}" style="color: #4338ca;">${inviteLink}</a>
+          </div>
+        </div>
+        <div class="footer">
+          &copy; ${new Date().getFullYear()} NexSphere Enterprise CRM Inc. All rights reserved.<br>
+          If you did not expect this invitation, you can disregard this email. No account has been created yet.
+        </div>
+      </div>
+    </body>
+    </html>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
