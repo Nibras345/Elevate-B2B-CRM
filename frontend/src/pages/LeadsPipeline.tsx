@@ -1,12 +1,14 @@
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
+import axios from 'axios';
 import {
   Plus,
   Search,
   Building,
   GripVertical,
   Trash2,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
-import { initialLeads, initialTeamMembers } from '../data/mockData';
 import { Drawer } from '../components/common/Drawer';
 import { Modal } from '../components/common/Modal';
 import { Badge, BadgeVariant } from '../components/common/Badge';
@@ -25,11 +27,14 @@ const PIPELINE_STAGES: StageConfig[] = [
   { id: 'Contacted', label: 'Contacted', color: 'border-t-blue-500 bg-blue-500/10' },
   { id: 'Proposal Sent', label: 'Proposal Sent', color: 'border-t-indigo-500 bg-indigo-500/10' },
   { id: 'Negotiation', label: 'Negotiation', color: 'border-t-amber-500 bg-amber-500/10' },
-  { id: 'Won', label: 'Won / Closed', color: 'border-t-emerald-500 bg-emerald-500/10' },
+  { id: 'Won / Closed', label: 'Won / Closed', color: 'border-t-emerald-500 bg-emerald-500/10' },
 ];
 
 export const LeadsPipeline: React.FC = () => {
-  const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  // STRICT RULE: No static or mock data. Initialize empty and fetch strictly from API.
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
@@ -48,7 +53,7 @@ export const LeadsPipeline: React.FC = () => {
     value: '',
     priority: 'High' as Priority,
     stage: 'New Lead' as PipelineStage,
-    assignedToName: 'Alex Morgan',
+    assignedToName: '',
     tags: 'Enterprise, Q1',
     notes: '',
   });
@@ -56,32 +61,69 @@ export const LeadsPipeline: React.FC = () => {
   const { notify } = useNotification();
   const { user } = useAuth();
 
+  // Route 1: GET /api/leads - Strict tenant isolation
+  const fetchLeads = async () => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.get('/api/leads', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success && Array.isArray(response.data.leads)) {
+        setLeads(response.data.leads);
+      }
+    } catch (err: any) {
+      console.error('[Fetch Leads Error]:', err);
+      notify(err.response?.data?.message || 'Failed to retrieve leads from pipeline.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeads();
+  }, [user?.tenantId]);
+
   // Filter leads
   const filteredLeads = leads.filter((lead) => {
+    const contact = lead.name || lead.contactName || '';
+    const company = lead.company || lead.companyName || '';
     const matchesSearch =
-      lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      contact.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (lead.tags && lead.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())));
 
-    const matchesOwner = ownerFilter === 'All' || lead.assignedTo.name === ownerFilter;
+    const matchesOwner = ownerFilter === 'All' || lead.assignedTo?.name === ownerFilter;
     const matchesPriority = priorityFilter === 'All' || lead.priority === priorityFilter;
 
     return matchesSearch && matchesOwner && matchesPriority;
   });
 
-  // Calculate stage summary stats
+  // Calculate dynamic stage summary stats
   const getStageStats = (stageId: PipelineStage) => {
-    const stageItems = filteredLeads.filter((l) => l.stage === stageId);
+    const stageItems = filteredLeads.filter(
+      (l) => l.stage === stageId || (stageId === 'Won / Closed' && (l.stage as string) === 'Won')
+    );
     const count = stageItems.length;
-    const totalVal = stageItems.reduce((acc, curr) => acc + (Number(curr.value) || 0), 0);
+    const totalVal = stageItems.reduce(
+      (acc, curr) => acc + (Number(curr.value ?? curr.estimatedValue) || 0),
+      0
+    );
     return { count, totalVal };
   };
 
   // Move lead to another stage
-  const moveLeadStage = (leadId: string, targetStage: PipelineStage) => {
+  const moveLeadStage = async (leadId: string, targetStage: PipelineStage) => {
+    const lead = leads.find((l) => (l.id || l._id) === leadId);
+    if (!lead) return;
+
+    // Optimistic UI update
     setLeads((prev) =>
       prev.map((l) => {
-        if (l.id === leadId) {
+        if ((l.id || l._id) === leadId) {
           return {
             ...l,
             stage: targetStage,
@@ -92,11 +134,45 @@ export const LeadsPipeline: React.FC = () => {
       })
     );
 
-    if (selectedLead && selectedLead.id === leadId) {
+    if (selectedLead && (selectedLead.id || selectedLead._id) === leadId) {
       setSelectedLead((prev) => (prev ? { ...prev, stage: targetStage } : null));
     }
 
-    notify(`Lead successfully moved to ${targetStage}`, 'success');
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.put(
+        `/api/leads/${leadId}`,
+        {
+          stage: targetStage,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        const updatedLead = response.data.lead;
+        setLeads((prev) =>
+          prev.map((l) => ((l.id || l._id) === leadId ? updatedLead : l))
+        );
+
+        if (response.data.autoConverted) {
+          notify(
+            response.data.message || `Deal won! ${updatedLead.company} has been converted to Clients!`,
+            'success'
+          );
+        } else {
+          notify(response.data.message || `Lead successfully moved to ${targetStage}`, 'success');
+        }
+      }
+    } catch (err: any) {
+      console.error('[Move Stage Error]:', err);
+      notify(err.response?.data?.message || 'Failed to update lead stage.', 'error');
+      fetchLeads(); // Rollback on failure
+    }
   };
 
   // Open edit drawer
@@ -105,69 +181,146 @@ export const LeadsPipeline: React.FC = () => {
     setIsDrawerOpen(true);
   };
 
-  // Save drawer edits
-  const handleSaveLeadEdits = (e: FormEvent) => {
+  // Route 3: PUT /api/leads/:id - Save drawer edits & Auto-Convert to Client if Won / Closed
+  const handleSaveLeadEdits = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
-    setLeads((prev) =>
-      prev.map((l) => (l.id === selectedLead.id ? selectedLead : l))
-    );
-    setIsDrawerOpen(false);
-    notify(`Deal terms for ${selectedLead.company} updated`, 'success');
+
+    const leadId = selectedLead.id || selectedLead._id;
+    if (!leadId) return;
+
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.put(
+        `/api/leads/${leadId}`,
+        {
+          contactName: selectedLead.name || selectedLead.contactName,
+          companyName: selectedLead.company || selectedLead.companyName,
+          estimatedValue: Number(selectedLead.value ?? selectedLead.estimatedValue) || 0,
+          priority: selectedLead.priority,
+          stage: selectedLead.stage,
+          email: selectedLead.email,
+          phone: selectedLead.phone,
+          notes: selectedLead.notes,
+          tags: selectedLead.tags,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        const updatedLead = response.data.lead;
+        // Instantly reflect change in state
+        setLeads((prev) =>
+          prev.map((l) => ((l.id || l._id) === leadId ? updatedLead : l))
+        );
+        setIsDrawerOpen(false);
+
+        if (response.data.autoConverted) {
+          notify(
+            response.data.message || `Deal won! ${updatedLead.company} converted to Clients database!`,
+            'success'
+          );
+        } else {
+          notify(response.data.message || `Deal terms for ${updatedLead.company} updated`, 'success');
+        }
+      }
+    } catch (err: any) {
+      console.error('[Update Lead Error]:', err);
+      notify(err.response?.data?.message || 'Failed to update lead.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Delete lead
-  const handleDeleteLead = (leadId: string) => {
-    setLeads((prev) => prev.filter((l) => l.id !== leadId));
-    setIsDrawerOpen(false);
-    notify('Lead removed from sales pipeline', 'info');
+  // DELETE /api/leads/:id
+  const handleDeleteLead = async (leadId: string) => {
+    const isConfirmed = window.confirm('Are you sure you want to remove this lead opportunity?');
+    if (!isConfirmed) return;
+
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.delete(`/api/leads/${leadId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setLeads((prev) => prev.filter((l) => (l.id || l._id) !== leadId));
+        setIsDrawerOpen(false);
+        notify(response.data.message || 'Lead removed from sales pipeline', 'info');
+      }
+    } catch (err: any) {
+      console.error('[Delete Lead Error]:', err);
+      notify(err.response?.data?.message || 'Failed to delete lead.', 'error');
+    }
   };
 
-  // Handle Add New Lead
-  const handleCreateLead = (e: FormEvent) => {
+  // POST /api/leads - Create new lead
+  const handleCreateLead = async (e: FormEvent) => {
     e.preventDefault();
-    const assignedUser = initialTeamMembers.find(m => m.name === newLeadForm.assignedToName) || {
-      name: newLeadForm.assignedToName,
-      avatar: user.avatar,
-      role: 'Sales Agent',
-    };
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.post(
+        '/api/leads',
+        {
+          contactName: newLeadForm.name,
+          companyName: newLeadForm.company,
+          email: newLeadForm.email,
+          phone: newLeadForm.phone,
+          estimatedValue: Number(newLeadForm.value) || 0,
+          priority: newLeadForm.priority,
+          stage: newLeadForm.stage,
+          notes: newLeadForm.notes,
+          tags: newLeadForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-    const newLead: Lead = {
-      id: `lead-${Date.now()}`,
-      name: newLeadForm.name,
-      company: newLeadForm.company,
-      email: newLeadForm.email,
-      phone: newLeadForm.phone,
-      value: Number(newLeadForm.value) || 25000,
-      priority: newLeadForm.priority,
-      stage: newLeadForm.stage,
-      assignedTo: {
-        name: assignedUser.name,
-        avatar: assignedUser.avatar || user.avatar,
-        role: assignedUser.role || 'Sales Agent',
-      },
-      tags: newLeadForm.tags.split(',').map(t => t.trim()).filter(Boolean),
-      source: 'Direct Inbound',
-      expectedClose: '2025-04-30',
-      lastActivity: 'Lead created in CRM pipeline',
-      notes: newLeadForm.notes || 'Initial opportunity qualifications underway.',
-    };
+      if (response.data.success) {
+        const createdLead = response.data.lead;
+        setLeads((prev) => [createdLead, ...prev]);
+        setIsAddModalOpen(false);
+        setNewLeadForm({
+          name: '',
+          company: '',
+          email: '',
+          phone: '',
+          value: '',
+          priority: 'High',
+          stage: 'New Lead',
+          assignedToName: '',
+          tags: 'Enterprise, Q1',
+          notes: '',
+        });
 
-    setLeads([newLead, ...leads]);
-    setIsAddModalOpen(false);
-    setNewLeadForm({
-      name: '',
-      company: '',
-      email: '',
-      phone: '',
-      value: '',
-      priority: 'High',
-      stage: 'New Lead',
-      assignedToName: 'Alex Morgan',
-      tags: 'Enterprise, Q1',
-      notes: '',
-    });
-    notify(`Created lead for ${newLead.company} ($${newLead.value.toLocaleString()})`, 'success');
+        if (response.data.autoConvertedClient) {
+          notify(`Lead created and immediately converted to Clients!`, 'success');
+        } else {
+          notify(
+            response.data.message || `Created lead for ${createdLead.company} ($${createdLead.value.toLocaleString()})`,
+            'success'
+          );
+        }
+      }
+    } catch (err: any) {
+      console.error('[Create Lead Error]:', err);
+      notify(err.response?.data?.message || 'Failed to create lead opportunity.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -188,14 +341,27 @@ export const LeadsPipeline: React.FC = () => {
           </p>
         </div>
 
-        {/* Action button */}
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Lead</span>
-        </button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchLeads}
+            disabled={isLoading}
+            className="p-2.5 text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Refresh Leads Pipeline"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-brand-600' : ''}`} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Lead</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -293,15 +459,25 @@ export const LeadsPipeline: React.FC = () => {
 
               {/* Card List in Column */}
               <div className="space-y-3 flex-1 overflow-y-auto pt-1">
-                {stageCards.length > 0 ? (
+                {isLoading ? (
+                  <div className="h-40 flex flex-col items-center justify-center text-slate-400 gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                    <span className="text-xs">Loading stage...</span>
+                  </div>
+                ) : stageCards.length > 0 ? (
                   stageCards.map((lead) => {
+                    const leadId = lead.id || (lead as any)._id;
+                    const contact = lead.name || lead.contactName || 'Unnamed Contact';
+                    const company = lead.company || lead.companyName || 'Unnamed Company';
+                    const val = Number(lead.value ?? lead.estimatedValue) || 0;
+
                     let priorityBadge: BadgeVariant = 'warning';
                     if (lead.priority === 'High') priorityBadge = 'danger';
                     if (lead.priority === 'Low') priorityBadge = 'neutral';
 
                     return (
                       <div
-                        key={lead.id}
+                        key={leadId}
                         onClick={() => handleOpenLead(lead)}
                         className="bg-white dark:bg-slate-800/90 rounded-xl p-4 border border-slate-200/80 dark:border-slate-700/60 shadow-xs hover:shadow-md hover:border-brand-500/50 transition-all cursor-pointer group relative"
                       >
@@ -323,7 +499,7 @@ export const LeadsPipeline: React.FC = () => {
                           >
                             <select
                               value={lead.stage}
-                              onChange={(e) => moveLeadStage(lead.id, e.target.value as PipelineStage)}
+                              onChange={(e) => moveLeadStage(leadId, e.target.value as PipelineStage)}
                               className="text-[10px] font-semibold bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded px-1.5 py-0.5 border border-slate-200 dark:border-slate-600 focus:outline-hidden cursor-pointer"
                               title="Move stage"
                             >
@@ -338,27 +514,38 @@ export const LeadsPipeline: React.FC = () => {
 
                         {/* Lead & Company Name */}
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
-                          {lead.name}
+                          {contact}
                         </h4>
                         <div className="text-xs text-slate-500 dark:text-slate-400 truncate flex items-center gap-1 mt-0.5">
                           <Building className="w-3 h-3 text-slate-400" />
-                          <span className="truncate">{lead.company}</span>
+                          <span className="truncate">{company}</span>
                         </div>
 
                         {/* Value & Tags */}
                         <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
                           <span className="text-sm font-extrabold text-slate-900 dark:text-white">
-                            ${Number(lead.value).toLocaleString()}
+                            ${val.toLocaleString()}
                           </span>
 
-                          <div className="flex items-center gap-1.5">
-                            <img
-                              src={lead.assignedTo.avatar}
-                              alt={lead.assignedTo.name}
-                              title={`Owner: ${lead.assignedTo.name}`}
-                              className="w-6 h-6 rounded-full object-cover ring-1 ring-white dark:ring-slate-900"
-                            />
-                          </div>
+                          {lead.assignedTo?.name ? (
+                            <div className="flex items-center gap-1.5">
+                              {lead.assignedTo.avatar ? (
+                                <img
+                                  src={lead.assignedTo.avatar}
+                                  alt={lead.assignedTo.name}
+                                  title={`Owner: ${lead.assignedTo.name}`}
+                                  className="w-6 h-6 rounded-full object-cover ring-1 ring-white dark:ring-slate-900"
+                                />
+                              ) : (
+                                <div
+                                  className="w-6 h-6 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 flex items-center justify-center text-[10px] font-bold"
+                                  title={`Owner: ${lead.assignedTo.name}`}
+                                >
+                                  {lead.assignedTo.name.charAt(0)}
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
 
                         {/* Tags list */}
@@ -533,7 +720,7 @@ export const LeadsPipeline: React.FC = () => {
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => handleDeleteLead(selectedLead.id)}
+                onClick={() => handleDeleteLead(selectedLead.id || (selectedLead as any)._id)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
@@ -550,9 +737,11 @@ export const LeadsPipeline: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
+                  disabled={isSaving}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer disabled:opacity-60"
                 >
-                  Save Changes
+                  {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
                 </button>
               </div>
             </div>
@@ -715,9 +904,11 @@ export const LeadsPipeline: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer disabled:opacity-60"
             >
-              Add to Pipeline
+              {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{isSaving ? 'Adding...' : 'Add to Pipeline'}</span>
             </button>
           </div>
         </form>

@@ -1,8 +1,8 @@
 export type Role = 'Company Admin' | 'Employee' | 'Sales Agent' | 'Support';
 
-export type PipelineStage = 'New Lead' | 'Contacted' | 'Proposal Sent' | 'Negotiation' | 'Won';
+export type PipelineStage = 'New Lead' | 'Contacted' | 'Proposal Sent' | 'Negotiation' | 'Won / Closed' | 'Won';
 
-export type Priority = 'High' | 'Medium' | 'Low';
+export type Priority = 'High' | 'Medium' | 'Low' | 'Urgent';
 
 export type ClientStatus = 'Active' | 'Inactive' | 'Pending';
 
@@ -16,36 +16,51 @@ export interface AssignedUser {
 
 export interface Lead {
   id: string;
+  _id?: string;
   name: string;
+  contactName?: string;
   company: string;
+  companyName?: string;
   email: string;
   phone: string;
   value: number;
+  estimatedValue?: number;
   priority: Priority;
   stage: PipelineStage;
   assignedTo: AssignedUser;
   tags: string[];
-  source: string;
-  expectedClose: string;
-  lastActivity: string;
-  notes: string;
+  source?: string;
+  expectedClose?: string;
+  lastActivity?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Client {
   id: string;
+  _id?: string;
   name: string;
+  contactName?: string;
   company: string;
+  companyName?: string;
   email: string;
   phone: string;
   ltv: number;
+  lifetimeValue?: number;
+  convertedAt?: string | Date;
   status: ClientStatus;
-  industry: string;
-  lastContacted: string;
-  address: string;
-  city: string;
-  country: string;
-  openDealsCount: number;
-  invoicesCount: number;
+  industry?: string;
+  lastContacted?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  openDealsCount?: number;
+  invoicesCount?: number;
+  dealCount?: number;
+  invoiceCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InvoiceItem {

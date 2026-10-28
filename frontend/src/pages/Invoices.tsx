@@ -1,5 +1,6 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 import {
   Plus,
   Search,
@@ -9,13 +10,14 @@ import {
   Check,
   Building2,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
-import { initialInvoices, initialClients } from '../data/mockData';
+import { initialInvoices } from '../data/mockData';
 import { Modal } from '../components/common/Modal';
 import { Badge, BadgeVariant } from '../components/common/Badge';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
-import { Invoice, InvoiceItem, InvoiceStatus } from '../types';
+import { Invoice, InvoiceItem, InvoiceStatus, Client } from '../types';
 
 export const Invoices: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
@@ -24,6 +26,10 @@ export const Invoices: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+
+  // Dynamic Clients state for Invoice Generator Modal
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState<boolean>(false);
 
   // Generator Modal state
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
@@ -45,6 +51,41 @@ export const Invoices: React.FC = () => {
 
   const { notify } = useNotification();
   const { user, tenantSettings } = useAuth();
+
+  // Dynamic fetch clients when Generator Modal opens
+  useEffect(() => {
+    if (isGeneratorOpen) {
+      const fetchClientsForInvoice = async () => {
+        try {
+          setIsLoadingClients(true);
+          const token = localStorage.getItem('nexcrm_jwt_token');
+          const response = await axios.get('/api/clients', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (response.data.success && Array.isArray(response.data.clients)) {
+            setClients(response.data.clients);
+            // Handle pre-selected client or default selection
+            if (preselectedClientId) {
+              setSelectedClientId(preselectedClientId);
+            } else if (!selectedClientId && response.data.clients.length > 0) {
+              const firstClient = response.data.clients[0];
+              setSelectedClientId(firstClient._id || firstClient.id || '');
+            }
+          }
+        } catch (error: any) {
+          console.error('[Fetch Clients for Invoice Error]:', error);
+          notify(error.response?.data?.message || 'Failed to fetch enterprise clients.', 'error');
+        } finally {
+          setIsLoadingClients(false);
+        }
+      };
+
+      fetchClientsForInvoice();
+    }
+  }, [isGeneratorOpen, user?.tenantId, preselectedClientId]);
 
   // Handle client pre-selection from Client Directory shortcut
   useEffect(() => {
@@ -103,23 +144,26 @@ export const Invoices: React.FC = () => {
   };
 
   // Submit invoice generation
-  const handleGenerateInvoice = (e: FormEvent) => {
+  const handleGenerateInvoice = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedClientId) {
       notify('Please select an enterprise client', 'warning');
       return;
     }
 
-    const client = initialClients.find(c => c.id === selectedClientId) || initialClients[0];
+    const client = clients.find(c => (c._id || c.id) === selectedClientId);
+    const clientName = client ? (client.contactName || client.name) : 'Valued Client';
+    const company = client ? (client.companyName || client.company) : 'Enterprise Client';
+    const email = client ? client.email : '';
     const generatedId = `INV-2025-${String(invoices.length + 1).padStart(3, '0')}`;
     const today = new Date().toISOString().split('T')[0];
 
     const newInvoice: Invoice = {
       id: generatedId,
-      clientId: client.id,
-      clientName: client.name,
-      company: client.company,
-      email: client.email,
+      clientId: selectedClientId,
+      clientName,
+      company,
+      email,
       issueDate: today,
       dueDate: dueDate,
       items: items.map(item => ({
@@ -135,11 +179,43 @@ export const Invoices: React.FC = () => {
       notes: invoiceNotes,
     };
 
+    // Persist invoice in backend MongoDB database for accurate client invoiceCount metrics
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      await axios.post(
+        '/api/invoices',
+        {
+          clientId: selectedClientId,
+          clientName,
+          company,
+          email,
+          invoiceNumber: generatedId,
+          dueDate,
+          items: newInvoice.items,
+          subtotal,
+          discount: discountAmount,
+          tax: taxAmount,
+          total: grandTotal,
+          status: 'Pending',
+          paymentTerms,
+          notes: invoiceNotes,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    } catch (apiErr) {
+      console.warn('[Invoice Persistence Warning]:', apiErr);
+    }
+
     setInvoices([newInvoice, ...invoices]);
     setIsGeneratorOpen(false);
     setActiveInvoiceForPreview(newInvoice);
     setIsPreviewOpen(true);
-    notify(`Invoice ${generatedId} created for ${client.company}!`, 'success');
+    notify(`Invoice ${generatedId} created for ${company}!`, 'success');
   };
 
   // Mark as paid
@@ -198,7 +274,6 @@ export const Invoices: React.FC = () => {
 
         <button
           onClick={() => {
-            setSelectedClientId(initialClients[0]?.id || '');
             setIsGeneratorOpen(true);
           }}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition-all cursor-pointer"
@@ -401,14 +476,26 @@ export const Invoices: React.FC = () => {
                 required
                 value={selectedClientId}
                 onChange={(e) => setSelectedClientId(e.target.value)}
+                disabled={isLoadingClients}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
               >
-                <option value="">Choose a client...</option>
-                {initialClients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.company} ({c.name})
-                  </option>
-                ))}
+                <option value="">
+                  {isLoadingClients
+                    ? 'Loading enterprise clients...'
+                    : clients.length === 0
+                    ? 'No clients found (convert a lead first)'
+                    : 'Choose an enterprise client...'}
+                </option>
+                {clients.map((client) => {
+                  const clientId = client._id || client.id;
+                  const companyName = client.companyName || client.company || 'Enterprise Client';
+                  const contactName = client.contactName || client.name || 'Primary Contact';
+                  return (
+                    <option key={clientId} value={client._id || clientId}>
+                      {companyName} ({contactName})
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

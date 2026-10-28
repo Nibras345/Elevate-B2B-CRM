@@ -7,6 +7,9 @@ import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import teamRoutes from './routes/teamRoutes';
 import tenantRoutes from './routes/tenantRoutes';
+import leadRoutes from './routes/leadRoutes';
+import clientRoutes from './routes/clientRoutes';
+import invoiceRoutes from './routes/invoiceRoutes';
 import { errorHandler } from './middleware/errorMiddleware';
 
 // Load environment variables
@@ -50,6 +53,9 @@ app.use('/api/users', userRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/tenant', tenantRoutes);
 app.use('/api/tenants', tenantRoutes);
+app.use('/api/leads', leadRoutes);
+app.use('/api/clients', clientRoutes);
+app.use('/api/invoices', invoiceRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

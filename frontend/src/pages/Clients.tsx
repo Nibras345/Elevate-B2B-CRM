@@ -1,5 +1,6 @@
-import React, { useState, FormEvent } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import {
   Search,
   Plus,
@@ -12,16 +13,22 @@ import {
   Trash2,
   Clock,
   Receipt,
+  Loader2,
+  RefreshCw,
+  UserCheck,
 } from 'lucide-react';
-import { initialClients } from '../data/mockData';
 import { Badge, BadgeVariant } from '../components/common/Badge';
 import { Drawer } from '../components/common/Drawer';
 import { Modal } from '../components/common/Modal';
 import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
 import { Client, ClientStatus } from '../types';
 
 export const Clients: React.FC = () => {
-  const [clients, setClients] = useState<Client[]>(initialClients);
+  // STRICT RULE: No static or mock data. Initialize empty and fetch strictly from API.
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState('ltv-desc'); // ltv-desc, ltv-asc, name-asc
@@ -53,26 +60,64 @@ export const Clients: React.FC = () => {
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
 
   const { notify } = useNotification();
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Route 2: GET /api/clients - Strict tenant isolation
+  const fetchClients = async () => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.get('/api/clients', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success && Array.isArray(response.data.clients)) {
+        setClients(response.data.clients);
+      }
+    } catch (err: any) {
+      console.error('[Fetch Clients Error]:', err);
+      notify(err.response?.data?.message || 'Failed to retrieve clients list.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClients();
+  }, [user?.tenantId]);
 
   // Filter clients
   const filteredClients = clients
     .filter((client) => {
       const query = searchQuery.toLowerCase();
+      const contact = (client.contactName || client.name || '').toLowerCase();
+      const comp = (client.companyName || client.company || '').toLowerCase();
+      const email = (client.email || '').toLowerCase();
+      const ind = (client.industry || '').toLowerCase();
+      const city = (client.city || '').toLowerCase();
+
       const matchesSearch =
-        client.name.toLowerCase().includes(query) ||
-        client.company.toLowerCase().includes(query) ||
-        client.email.toLowerCase().includes(query) ||
-        client.industry.toLowerCase().includes(query) ||
-        client.city.toLowerCase().includes(query);
+        contact.includes(query) ||
+        comp.includes(query) ||
+        email.includes(query) ||
+        ind.includes(query) ||
+        city.includes(query);
 
       const matchesStatus = statusFilter === 'All' || client.status === statusFilter;
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
-      if (sortBy === 'ltv-desc') return b.ltv - a.ltv;
-      if (sortBy === 'ltv-asc') return a.ltv - b.ltv;
-      if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
+      const ltvA = Number(a.lifetimeValue ?? a.ltv) || 0;
+      const ltvB = Number(b.lifetimeValue ?? b.ltv) || 0;
+      const nameA = a.contactName || a.name || '';
+      const nameB = b.contactName || b.name || '';
+
+      if (sortBy === 'ltv-desc') return ltvB - ltvA;
+      if (sortBy === 'ltv-asc') return ltvA - ltvB;
+      if (sortBy === 'name-asc') return nameA.localeCompare(nameB);
       return 0;
     });
 
@@ -96,61 +141,131 @@ export const Clients: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleCreateClient = (e: FormEvent) => {
+  const handleCreateClient = async (e: FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
       notify('Please resolve highlighted form validation errors', 'warning');
       return;
     }
 
-    const createdClient: Client = {
-      id: `cli-${Date.now()}`,
-      name: newClientForm.name,
-      company: newClientForm.company,
-      email: newClientForm.email,
-      phone: newClientForm.phone,
-      ltv: Number(newClientForm.ltv) || 15000,
-      status: newClientForm.status,
-      industry: newClientForm.industry,
-      lastContacted: new Date().toISOString().split('T')[0],
-      address: newClientForm.address || '100 Business Parkway',
-      city: newClientForm.city || 'Austin, TX',
-      country: newClientForm.country,
-      openDealsCount: 1,
-      invoicesCount: 0,
-    };
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.post(
+        '/api/clients',
+        {
+          contactName: newClientForm.name,
+          companyName: newClientForm.company,
+          email: newClientForm.email,
+          phone: newClientForm.phone,
+          lifetimeValue: Number(newClientForm.ltv) || 0,
+          status: newClientForm.status,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-    setClients([createdClient, ...clients]);
-    setIsAddDrawerOpen(false);
-    setNewClientForm({
-      name: '',
-      company: '',
-      email: '',
-      phone: '',
-      ltv: '',
-      status: 'Active',
-      industry: 'Enterprise Software',
-      address: '',
-      city: '',
-      country: 'United States',
-    });
-    setFormErrors({});
-    notify(`Client ${createdClient.name} (${createdClient.company}) added successfully`, 'success');
+      if (response.data.success) {
+        const createdClient = response.data.client;
+        setClients((prev) => [createdClient, ...prev]);
+        setIsAddDrawerOpen(false);
+        setNewClientForm({
+          name: '',
+          company: '',
+          email: '',
+          phone: '',
+          ltv: '',
+          status: 'Active',
+          industry: 'Enterprise Software',
+          address: '',
+          city: '',
+          country: 'United States',
+        });
+        setFormErrors({});
+        notify(
+          response.data.message || `Client ${createdClient.contactName || createdClient.name} added successfully`,
+          'success'
+        );
+      }
+    } catch (err: any) {
+      console.error('[Create Client Error]:', err);
+      notify(err.response?.data?.message || 'Failed to create client.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleSaveEdit = (e: FormEvent) => {
+  const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!clientToEdit) return;
-    setClients((prev) =>
-      prev.map((c) => (c.id === clientToEdit.id ? clientToEdit : c))
-    );
-    setIsEditModalOpen(false);
-    notify(`Updated client record for ${clientToEdit.company}`, 'success');
+
+    const clientId = clientToEdit.id || (clientToEdit as any)._id;
+    if (!clientId) return;
+
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.put(
+        `/api/clients/${clientId}`,
+        {
+          contactName: clientToEdit.contactName || clientToEdit.name,
+          companyName: clientToEdit.companyName || clientToEdit.company,
+          email: clientToEdit.email,
+          phone: clientToEdit.phone,
+          lifetimeValue: Number(clientToEdit.lifetimeValue ?? clientToEdit.ltv) || 0,
+          status: clientToEdit.status,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        const updated = response.data.client;
+        setClients((prev) =>
+          prev.map((c) => ((c.id || (c as any)._id) === clientId ? updated : c))
+        );
+        setIsEditModalOpen(false);
+        notify(
+          response.data.message || `Updated client record for ${updated.companyName || updated.company}`,
+          'success'
+        );
+      }
+    } catch (err: any) {
+      console.error('[Update Client Error]:', err);
+      notify(err.response?.data?.message || 'Failed to update client record.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteClient = (clientId: string, companyName: string) => {
-    setClients((prev) => prev.filter((c) => c.id !== clientId));
-    notify(`Deleted client record for ${companyName}`, 'info');
+  const handleDeleteClient = async (clientId: string, companyName: string) => {
+    const isConfirmed = window.confirm(`Are you sure you want to delete the client record for ${companyName}?`);
+    if (!isConfirmed) return;
+
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.delete(`/api/clients/${clientId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setClients((prev) => prev.filter((c) => (c.id || (c as any)._id) !== clientId));
+        notify(response.data.message || `Deleted client record for ${companyName}`, 'info');
+      }
+    } catch (err: any) {
+      console.error('[Delete Client Error]:', err);
+      notify(err.response?.data?.message || 'Failed to delete client record.', 'error');
+    }
   };
 
   const openHistoryDrawer = (client: Client) => {
@@ -164,8 +279,9 @@ export const Clients: React.FC = () => {
   };
 
   const handleGenerateInvoiceShortcut = (client: Client) => {
-    notify(`Redirecting to Invoices for ${client.company}`, 'info');
-    navigate(`/invoices?clientId=${client.id}`);
+    const cId = client.id || (client as any)._id;
+    notify(`Redirecting to Invoices for ${client.companyName || client.company}`, 'info');
+    navigate(`/invoices?clientId=${cId}`);
   };
 
   return (
@@ -186,13 +302,25 @@ export const Clients: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddDrawerOpen(true)}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Client</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchClients}
+            disabled={isLoading}
+            className="p-2.5 text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Refresh Client Directory"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-brand-600' : ''}`} />
+          </button>
+
+          <button
+            onClick={() => setIsAddDrawerOpen(true)}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Client</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -266,29 +394,53 @@ export const Clients: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-              {paginatedClients.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+                      <span className="text-xs font-medium">Fetching verified client accounts...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedClients.length > 0 ? (
                 paginatedClients.map((client) => {
+                  const clientId = client.id || (client as any)._id;
+                  const contactName = client.contactName || client.name || 'Unnamed Client';
+                  const companyName = client.companyName || client.company || 'Unnamed Company';
+                  const ltvValue = Number(client.lifetimeValue ?? client.ltv) || 0;
+                  const convertedDate = client.convertedAt
+                    ? new Date(client.convertedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                    : client.lastContacted || 'Recent';
+
+                  const initials = contactName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join('') || 'C';
+
                   let statusBadge: BadgeVariant = 'neutral';
                   if (client.status === 'Active') statusBadge = 'success';
                   if (client.status === 'Pending') statusBadge = 'warning';
 
                   return (
                     <tr
-                      key={client.id}
+                      key={clientId}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors group"
                     >
                       {/* Name & Avatar */}
                       <td className="py-4 px-4 sm:px-6">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-500 text-white font-bold flex items-center justify-center flex-shrink-0 text-xs shadow-xs">
-                            {client.name.split(' ').map(n => n[0]).join('')}
+                            {initials}
                           </div>
                           <div>
                             <span className="font-bold text-slate-900 dark:text-white block group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
-                              {client.name}
+                              {contactName}
                             </span>
                             <span className="text-[11px] text-slate-400 block">
-                              {client.city}, {client.country}
+                              {client.city || 'Global'}, {client.country || 'USA'}
                             </span>
                           </div>
                         </div>
@@ -297,10 +449,10 @@ export const Clients: React.FC = () => {
                       {/* Company & Industry */}
                       <td className="py-4 px-4">
                         <span className="font-semibold text-slate-800 dark:text-slate-200 block">
-                          {client.company}
+                          {companyName}
                         </span>
                         <span className="text-[11px] text-slate-400 block mt-0.5">
-                          {client.industry}
+                          {client.industry || 'Enterprise'}
                         </span>
                       </td>
 
@@ -312,24 +464,24 @@ export const Clients: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
                           <Phone className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{client.phone}</span>
+                          <span>{client.phone || 'No phone'}</span>
                         </div>
                       </td>
 
                       {/* LTV */}
                       <td className="py-4 px-4">
                         <span className="font-extrabold text-slate-900 dark:text-white text-sm block">
-                          ${client.ltv.toLocaleString()}
+                          ${ltvValue.toLocaleString()}
                         </span>
                         <span className="text-[10px] text-slate-400 block">
-                          Last deal: {client.lastContacted}
+                          Converted: {convertedDate}
                         </span>
                       </td>
 
                       {/* Status */}
                       <td className="py-4 px-4">
                         <Badge variant={statusBadge} size="sm">
-                          {client.status}
+                          {client.status || 'Active'}
                         </Badge>
                       </td>
 
@@ -337,10 +489,10 @@ export const Clients: React.FC = () => {
                       <td className="py-4 px-4 text-center">
                         <div className="inline-flex items-center gap-2">
                           <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium text-[11px]" title="Open Deals">
-                            {client.openDealsCount} Deals
+                            {client.dealCount ?? client.openDealsCount ?? 1} Deals
                           </span>
                           <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium text-[11px]" title="Invoices">
-                            {client.invoicesCount} Invoices
+                            {client.invoiceCount ?? client.invoicesCount ?? 0} Invoices
                           </span>
                         </div>
                       </td>
@@ -373,7 +525,7 @@ export const Clients: React.FC = () => {
                           </button>
 
                           <button
-                            onClick={() => handleDeleteClient(client.id, client.company)}
+                            onClick={() => handleDeleteClient(clientId, companyName)}
                             title="Delete Client"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                           >
@@ -386,8 +538,28 @@ export const Clients: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
-                    No clients found matching the query "{searchQuery}"
+                  <td colSpan={7} className="py-16 text-center">
+                    <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                        <UserCheck className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                        {searchQuery ? 'No matching clients found' : 'No converted clients yet'}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                        {searchQuery
+                          ? `No client matched "${searchQuery}". Try adjusting your filters.`
+                          : 'Leads moved to "Won / Closed" in the Leads Pipeline automatically convert here, or click below to manually add a client.'}
+                      </p>
+                      {!searchQuery && (
+                        <button
+                          onClick={() => setIsAddDrawerOpen(true)}
+                          className="mt-4 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          + Add Client
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
@@ -626,9 +798,11 @@ export const Clients: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer disabled:opacity-60"
             >
-              Provision Client
+              {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{isSaving ? 'Provisioning...' : 'Provision Client'}</span>
             </button>
           </div>
         </form>
@@ -639,7 +813,7 @@ export const Clients: React.FC = () => {
         isOpen={isHistoryDrawerOpen}
         onClose={() => setIsHistoryDrawerOpen(false)}
         title="Client Ledger & Account History"
-        subtitle={selectedClientForHistory ? `${selectedClientForHistory.company} · ${selectedClientForHistory.name}` : ''}
+        subtitle={selectedClientForHistory ? `${selectedClientForHistory.companyName || selectedClientForHistory.company} · ${selectedClientForHistory.contactName || selectedClientForHistory.name}` : ''}
         maxWidth="max-w-xl"
       >
         {selectedClientForHistory && (
@@ -648,26 +822,26 @@ export const Clients: React.FC = () => {
             <div className="p-4 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 text-white space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-bold">{selectedClientForHistory.company}</h3>
-                  <p className="text-xs text-brand-100 mt-0.5">{selectedClientForHistory.industry}</p>
+                  <h3 className="text-base font-bold">{selectedClientForHistory.companyName || selectedClientForHistory.company}</h3>
+                  <p className="text-xs text-brand-100 mt-0.5">{selectedClientForHistory.industry || 'Enterprise Client'}</p>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-white/20 text-xs font-semibold backdrop-blur-xs">
-                  {selectedClientForHistory.status}
+                  {selectedClientForHistory.status || 'Active'}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/20 text-center">
                 <div>
                   <span className="text-[10px] text-brand-100 block">Lifetime Value</span>
-                  <span className="text-sm font-extrabold">${selectedClientForHistory.ltv.toLocaleString()}</span>
+                  <span className="text-sm font-extrabold">${(Number(selectedClientForHistory.lifetimeValue ?? selectedClientForHistory.ltv) || 0).toLocaleString()}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-brand-100 block">Open Deals</span>
-                  <span className="text-sm font-extrabold">{selectedClientForHistory.openDealsCount}</span>
+                  <span className="text-sm font-extrabold">{selectedClientForHistory.dealCount ?? selectedClientForHistory.openDealsCount ?? 1}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-brand-100 block">Invoices Billed</span>
-                  <span className="text-sm font-extrabold">{selectedClientForHistory.invoicesCount}</span>
+                  <span className="text-sm font-extrabold">{selectedClientForHistory.invoiceCount ?? selectedClientForHistory.invoicesCount ?? 0}</span>
                 </div>
               </div>
             </div>
@@ -679,7 +853,7 @@ export const Clients: React.FC = () => {
               </span>
               <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-700/60">
                 <span className="text-slate-400">Primary Contact:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedClientForHistory.name}</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedClientForHistory.contactName || selectedClientForHistory.name}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-700/60">
                 <span className="text-slate-400">Work Email:</span>
@@ -862,9 +1036,11 @@ export const Clients: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer"
+                disabled={isSaving}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-md shadow-brand-500/20 cursor-pointer disabled:opacity-60"
               >
-                Save Client Record
+                {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isSaving ? 'Saving...' : 'Save Client Record'}</span>
               </button>
             </div>
           </form>
