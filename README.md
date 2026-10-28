@@ -55,6 +55,13 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Instant Status Progression**: One-click checkmark action marks invoices as `Paid` via `PUT /api/invoices/:id/status`, immediately updating local state and recalculating KPI widgets without a page reload.
 - **Printable Template**: Pixel-perfect invoice modal ready for browser print and PDF export.
 
+### 🧭 7. Dynamic Sidebar Notification Badges & Live Metrics
+- **Real-Time Tenant Metrics**: The sidebar notification badges dynamically query the backend (`GET /api/app/sidebar-stats`) to display real-time counts of actionable items isolated to the authenticated tenant.
+- **Active Leads Counter**: Displays the total count of ongoing sales opportunities in the pipeline, automatically filtering out won or closed deals (`stage !== 'Won / Closed'`).
+- **Pending Invoices Counter**: Tracks unpaid and pending billing balances (`status === 'Pending'`) requiring follow-up.
+- **Zero-Count Conditional Hiding**: If a metric count is `0`, the notification badge is cleanly omitted from the UI to avoid visual clutter.
+- **Event-Driven Synchronization**: Dispatches custom browser events (`crm_sidebar_stats_updated`) across invoice generation, status progressions (marking paid), lead stage changes, and deletions, instantly keeping the navigation badges in sync without requiring a page refresh.
+
 ---
 
 ## 🛠️ Technology Stack
