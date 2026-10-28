@@ -85,6 +85,7 @@ CRM/
 │   │   │   ├── cloudinary.ts       # Cloudinary media configuration
 │   │   │   └── db.ts               # MongoDB Mongoose connection handler
 │   │   ├── controllers/
+│   │   │   ├── appController.ts    # Sidebar notification metrics & app badges
 │   │   │   ├── authController.ts   # Sign in, registration, forgot password
 │   │   │   ├── clientController.ts # Enterprise clients & dynamic deal/invoice counts
 │   │   │   ├── invoiceController.ts# Invoices CRUD, status updates & population
@@ -103,6 +104,7 @@ CRM/
 │   │   │   ├── Tenant.ts           # Company profile, branding, maxSeats schema
 │   │   │   └── User.ts             # User credentials, roles, workspace memberships
 │   │   ├── routes/
+│   │   │   ├── appRoutes.ts        # /api/app endpoints (sidebar badge metrics)
 │   │   │   ├── authRoutes.ts       # /api/auth endpoints
 │   │   │   ├── clientRoutes.ts     # /api/clients endpoints
 │   │   │   ├── invoiceRoutes.ts    # /api/invoices endpoints
@@ -259,6 +261,11 @@ cd Elevate-B2B-CRM
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/tenant/stats` | Private | Fetch real-time `usedSeats`, `maxSeats`, and active counts |
+
+### 🧭 App & Navigation Stats (`/api/app`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/app/sidebar-stats` | Private | Fetch real-time dynamic active leads & pending invoices badge counts |
 
 ### 📈 Leads Pipeline (`/api/leads`)
 | Method | Endpoint | Access | Description |

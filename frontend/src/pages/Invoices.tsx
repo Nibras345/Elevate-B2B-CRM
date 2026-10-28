@@ -226,6 +226,7 @@ export const Invoices: React.FC = () => {
         setActiveInvoiceForPreview(createdInv);
         setIsPreviewOpen(true);
         notify(response.data.message || `Invoice ${createdInv.invoiceNumber || generatedId} created for ${company}!`, 'success');
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
       }
     } catch (apiErr: any) {
       console.error('[Invoice Creation Error]:', apiErr);
@@ -257,6 +258,7 @@ export const Invoices: React.FC = () => {
           setActiveInvoiceForPreview(prev => (prev ? { ...prev, status: 'Paid' } : null));
         }
         notify(response.data.message || `Invoice marked as Paid`, 'success');
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
       }
     } catch (err: any) {
       console.error('[Mark Paid Error]:', err);
@@ -284,6 +286,7 @@ export const Invoices: React.FC = () => {
           setActiveInvoiceForPreview(null);
         }
         notify(response.data.message || 'Invoice deleted successfully', 'info');
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
       }
     } catch (err: any) {
       console.error('[Delete Invoice Error]:', err);

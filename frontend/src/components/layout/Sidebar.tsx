@@ -45,6 +45,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
   const [isLoadingSeats, setIsLoadingSeats] = useState<boolean>(false);
 
+  // Dynamic Sidebar Notification Statistics (Active Leads & Pending Invoices)
+  const [sidebarStats, setSidebarStats] = useState({ activeLeads: 0, pendingInvoices: 0 });
+
   useEffect(() => {
     const fetchSeatStats = async () => {
       try {
@@ -84,6 +87,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, [user?.tenantId]);
 
+  // Fetch dynamic sidebar notification badge counts
+  useEffect(() => {
+    const fetchSidebarStats = async () => {
+      try {
+        const token = localStorage.getItem('nexcrm_jwt_token');
+        if (!token) return;
+
+        const response = await axios.get('/api/app/sidebar-stats', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.data.success) {
+          setSidebarStats({
+            activeLeads: Number(response.data.activeLeadsCount) || 0,
+            pendingInvoices: Number(response.data.pendingInvoicesCount) || 0,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch sidebar statistics:', error);
+      }
+    };
+
+    fetchSidebarStats();
+
+    // Listen for custom app events and navigation changes to keep badges in sync
+    const handleSidebarUpdate = () => {
+      fetchSidebarStats();
+    };
+
+    window.addEventListener('crm_sidebar_stats_updated', handleSidebarUpdate);
+    window.addEventListener('crm_leads_updated', handleSidebarUpdate);
+    window.addEventListener('crm_invoices_updated', handleSidebarUpdate);
+
+    return () => {
+      window.removeEventListener('crm_sidebar_stats_updated', handleSidebarUpdate);
+      window.removeEventListener('crm_leads_updated', handleSidebarUpdate);
+      window.removeEventListener('crm_invoices_updated', handleSidebarUpdate);
+    };
+  }, [user?.tenantId, location.pathname]);
+
   const navItems: NavItem[] = [
     {
       name: 'Dashboard',
@@ -95,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       name: 'Leads Pipeline',
       path: '/leads',
       icon: KanbanSquare,
-      badge: '10',
+      badge: sidebarStats.activeLeads > 0 ? String(sidebarStats.activeLeads) : null,
     },
     {
       name: 'Clients',
@@ -107,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       name: 'Invoices',
       path: '/invoices',
       icon: Receipt,
-      badge: '3',
+      badge: sidebarStats.pendingInvoices > 0 ? String(sidebarStats.pendingInvoices) : null,
     },
     {
       name: 'Team Members',

@@ -167,6 +167,7 @@ export const LeadsPipeline: React.FC = () => {
         } else {
           notify(response.data.message || `Lead successfully moved to ${targetStage}`, 'success');
         }
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
       }
     } catch (err: any) {
       console.error('[Move Stage Error]:', err);
@@ -229,6 +230,7 @@ export const LeadsPipeline: React.FC = () => {
         } else {
           notify(response.data.message || `Deal terms for ${updatedLead.company} updated`, 'success');
         }
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
       }
     } catch (err: any) {
       console.error('[Update Lead Error]:', err);
@@ -255,6 +257,7 @@ export const LeadsPipeline: React.FC = () => {
         setLeads((prev) => prev.filter((l) => (l.id || l._id) !== leadId));
         setIsDrawerOpen(false);
         notify(response.data.message || 'Lead removed from sales pipeline', 'info');
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
       }
     } catch (err: any) {
       console.error('[Delete Lead Error]:', err);
@@ -314,6 +317,7 @@ export const LeadsPipeline: React.FC = () => {
             'success'
           );
         }
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
       }
     } catch (err: any) {
       console.error('[Create Lead Error]:', err);
