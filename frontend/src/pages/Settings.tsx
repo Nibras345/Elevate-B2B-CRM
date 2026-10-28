@@ -209,10 +209,11 @@ export const Settings: React.FC = () => {
           role: 'Sales Agent',
           department: 'Enterprise Sales',
         });
-        // Refresh team table and seat stats & notify sidebar
+        // Refresh team table and seat stats & notify sidebar and notification bell
         await fetchTeamMembers();
         await fetchSeatStats();
         window.dispatchEvent(new Event('crm_seat_stats_updated'));
+        window.dispatchEvent(new Event('crm_notifications_updated'));
       } else {
         notify(response.data.message || 'Failed to send invitation.', 'error');
       }

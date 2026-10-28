@@ -11,6 +11,7 @@ import leadRoutes from './routes/leadRoutes';
 import clientRoutes from './routes/clientRoutes';
 import invoiceRoutes from './routes/invoiceRoutes';
 import appRoutes from './routes/appRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 import { errorHandler } from './middleware/errorMiddleware';
 
 // Load environment variables
@@ -58,6 +59,7 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/app', appRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

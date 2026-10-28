@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
 import {
   Search,
   Bell,
@@ -25,12 +26,35 @@ interface NavbarProps {
 }
 
 interface NotificationItem {
-  id: number;
+  _id?: string;
+  id?: string | number;
+  tenantId?: string;
   title: string;
-  description: string;
-  time: string;
-  read: boolean;
+  message?: string;
+  description?: string;
+  type?: string;
+  isRead: boolean;
+  createdAt?: string | Date;
+  time?: string;
 }
+
+/**
+ * Helper to display human-readable time ago
+ */
+const formatTimeAgo = (dateInput: string | Date | undefined): string => {
+  if (!dateInput) return 'Just now';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return typeof dateInput === 'string' ? dateInput : 'Recently';
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString();
+};
 
 export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch }) => {
   const { user, tenantSettings, logout, switchRole } = useAuth();
@@ -40,41 +64,52 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(3);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState<boolean>(false);
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: 1,
-      title: 'Deal Won: $64,000',
-      description: 'Starlight Enterprise Solutions signed Master Agreement',
-      time: '12m ago',
-      read: false,
-    },
-    {
-      id: 2,
-      title: 'New Enterprise Lead Assigned',
-      description: 'Elena Rostova from Nordic Velocity Group contacted',
-      time: '1h ago',
-      read: false,
-    },
-    {
-      id: 3,
-      title: 'Payment Received: $81,400',
-      description: 'Solaria Energy Tech settled Invoice INV-2025-002',
-      time: '4h ago',
-      read: false,
-    },
-    {
-      id: 4,
-      title: 'Weekly Pipeline Report Ready',
-      description: 'Q1 target achievement is currently tracking at 108%',
-      time: '1d ago',
-      read: true,
-    },
-  ]);
+  // Fetch dynamic notifications from backend
+  const fetchNotifications = async () => {
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      if (!token) return;
+
+      setIsLoadingNotifications(true);
+      const response = await axios.get('/api/notifications', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success && Array.isArray(response.data.notifications)) {
+        const fetched = response.data.notifications;
+        setNotifications(fetched);
+        const unread = fetched.filter((item: NotificationItem) => item.isRead === false).length;
+        setUnreadCount(unread);
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+
+    // Listen for custom real-time notification events
+    const handleNotifUpdate = () => {
+      fetchNotifications();
+    };
+
+    window.addEventListener('crm_notifications_updated', handleNotifUpdate);
+    return () => {
+      window.removeEventListener('crm_notifications_updated', handleNotifUpdate);
+    };
+  }, [user?.tenantId]);
 
   // Click outside listener for dropdowns
   useEffect(() => {
@@ -101,10 +136,35 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
     notify(`Simulated role switched to: ${targetRole}`, 'success');
   };
 
-  const markAllNotificationsAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    setUnreadCount(0);
-    notify('All notifications marked as read', 'info');
+  const markAllNotificationsAsRead = async () => {
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      if (!token) return;
+
+      const response = await axios.put(
+        '/api/notifications/mark-all-read',
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setUnreadCount(0);
+        setNotifications((prev) =>
+          prev.map((n) => ({
+            ...n,
+            isRead: true,
+          }))
+        );
+        notify('All notifications marked as read', 'info');
+      }
+    } catch (err: any) {
+      console.error('Failed to mark notifications as read:', err);
+      notify('Failed to update notifications status', 'error');
+    }
   };
 
   return (
@@ -166,7 +226,9 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+              <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-extrabold text-white bg-rose-500 rounded-full ring-2 ring-white dark:ring-slate-900 animate-pulse">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
             )}
           </button>
 
@@ -176,7 +238,7 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
                 <div className="flex items-center gap-2">
                   <h4 className="font-semibold text-sm text-slate-900 dark:text-white">Notifications</h4>
                   {unreadCount > 0 && (
-                    <span className="px-2 py-0.5 text-[11px] bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300 font-bold rounded-full">
+                    <span className="px-2 py-0.5 text-[11px] bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-bold rounded-full">
                       {unreadCount} new
                     </span>
                   )}
@@ -186,35 +248,68 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
                     onClick={markAllNotificationsAsRead}
                     className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium cursor-pointer"
                   >
-                    Mark all read
+                    Mark all as read
                   </button>
                 )}
               </div>
 
               <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
-                {notifications.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex gap-3 ${
-                      !item.read ? 'bg-brand-50/30 dark:bg-brand-950/20' : ''
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/50 flex items-center justify-center text-brand-600 dark:text-brand-400 flex-shrink-0 mt-0.5">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                        {item.title}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">
-                        {item.description}
-                      </p>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">
-                        {item.time}
-                      </span>
-                    </div>
+                {isLoadingNotifications ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    Loading notifications...
                   </div>
-                ))}
+                ) : notifications.length > 0 ? (
+                  notifications.map((item) => {
+                    const isUnread = !item.isRead;
+                    return (
+                      <div
+                        key={item._id || item.id}
+                        className={`p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors flex gap-3 ${
+                          isUnread
+                            ? 'bg-blue-50/70 dark:bg-blue-950/40 border-l-2 border-brand-500'
+                            : 'bg-white dark:bg-slate-900'
+                        }`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                            isUnread
+                              ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-xs truncate ${
+                              isUnread
+                                ? 'font-bold text-slate-900 dark:text-white'
+                                : 'font-medium text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {item.title}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">
+                            {item.message || item.description}
+                          </p>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">
+                            {formatTimeAgo(item.createdAt || item.time)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-10 text-center px-4">
+                    <Bell className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2 opacity-60" />
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      No new notifications
+                    </p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      You're all caught up on tenant alerts.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-center">

@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Invitation } from '../models/Invitation';
 import { Tenant } from '../models/Tenant';
+import { Notification } from '../models/Notification';
 import { AuthRequest } from '../types';
 import { sendInvitationEmail } from '../utils/emailService';
 
@@ -130,6 +131,27 @@ export const inviteTeamMember = async (
         expiresAt,
         invitedBy: req.user?._id as any,
       });
+    }
+
+    // Create Notification record for this tenant
+    try {
+      const tenantObjId =
+        invitation.tenant ||
+        (tenantDoc ? tenantDoc._id : null) ||
+        (mongoose.isValidObjectId(currentTenantId) ? new mongoose.Types.ObjectId(currentTenantId) : null);
+
+      if (tenantObjId) {
+        await Notification.create({
+          tenantId: tenantObjId,
+          tenantCode: currentTenantId,
+          title: 'Invite Sent',
+          message: `Invitation sent to ${normalizedEmail}`,
+          type: 'INVITE_SENT',
+          isRead: false,
+        });
+      }
+    } catch (notifError) {
+      console.error('[Notification Creation Error - inviteTeamMember]:', notifError);
     }
 
     // 4. Construct invitation link
@@ -355,7 +377,7 @@ export const acceptInvite = async (
     const { fullName, newPassword, password } = req.body;
 
     const chosenPassword = newPassword || password;
-    const chosenName = fullName?.trim();
+    const chosenName = (fullName || (req.body as any).name)?.trim();
 
     if (!token) {
       res.status(400).json({
@@ -510,6 +532,23 @@ export const acceptInvite = async (
         avatar:
           'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       });
+    }
+
+    // Create Notification record for this tenant
+    try {
+      const targetTenantObjId = tenantObjectId || (tenantDoc ? tenantDoc._id : null);
+      if (targetTenantObjId) {
+        await Notification.create({
+          tenantId: targetTenantObjId,
+          tenantCode: invitation.tenantId,
+          title: 'New Member Joined',
+          message: `${user.name || chosenName || invitation.email} has accepted the invitation`,
+          type: 'INVITE_ACCEPTED',
+          isRead: false,
+        });
+      }
+    } catch (notifError) {
+      console.error('[Notification Creation Error - acceptInvitation]:', notifError);
     }
 
     // 5. Delete invitation record

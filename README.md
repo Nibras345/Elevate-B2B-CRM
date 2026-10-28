@@ -62,6 +62,14 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Zero-Count Conditional Hiding**: If a metric count is `0`, the notification badge is cleanly omitted from the UI to avoid visual clutter.
 - **Event-Driven Synchronization**: Dispatches custom browser events (`crm_sidebar_stats_updated`) across invoice generation, status progressions (marking paid), lead stage changes, and deletions, instantly keeping the navigation badges in sync without requiring a page refresh.
 
+### 🔔 8. Dynamic Notification Bell System
+- **Database-Driven Alerts**: Notifications dropdown is completely free of static mock data and backed by a MongoDB `Notification` model with strict tenant isolation.
+- **Automated Workflow Triggers**: Automatically records notifications on critical team events:
+  - When invitations are dispatched (`POST /api/team/invite` -> "Invite Sent: Invitation sent to [email]").
+  - When candidates accept and join (`POST /api/team/accept-invite/:token` -> "New Member Joined: [Name] has accepted the invitation").
+- **Dynamic Unread Badge**: Displays a vibrant red indicator badge with the exact unread count on the bell icon whenever `unreadCount > 0`.
+- **One-Click Read Status**: "Mark all as read" button sends a `PUT /api/notifications/mark-all-read` request, instantly switching unread cards from blue to white and clearing the bell badge without page reload.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -97,6 +105,7 @@ CRM/
 │   │   │   ├── clientController.ts # Enterprise clients & dynamic deal/invoice counts
 │   │   │   ├── invoiceController.ts# Invoices CRUD, status updates & population
 │   │   │   ├── leadController.ts   # Leads pipeline & auto-conversion workflow
+│   │   │   ├── notificationController.ts # Notification feeds and mark-all-read
 │   │   │   ├── teamController.ts   # Member invites, listing, removal, acceptance
 │   │   │   ├── tenantController.ts # Tenant stats, seat usage, workspace details
 │   │   │   └── userController.ts   # Profile updates, password modification, avatars
@@ -108,6 +117,7 @@ CRM/
 │   │   │   ├── Invitation.ts       # Tokenized workspace invitation schema
 │   │   │   ├── Invoice.ts          # Itemized invoice schema with status & client ref
 │   │   │   ├── Lead.ts             # Kanban lead schema with stage progression
+│   │   │   ├── Notification.ts     # Multi-tenant activity notification schema
 │   │   │   ├── Tenant.ts           # Company profile, branding, maxSeats schema
 │   │   │   └── User.ts             # User credentials, roles, workspace memberships
 │   │   ├── routes/
@@ -116,6 +126,7 @@ CRM/
 │   │   │   ├── clientRoutes.ts     # /api/clients endpoints
 │   │   │   ├── invoiceRoutes.ts    # /api/invoices endpoints
 │   │   │   ├── leadRoutes.ts       # /api/leads endpoints
+│   │   │   ├── notificationRoutes.ts # /api/notifications endpoints
 │   │   │   ├── teamRoutes.ts       # /api/team endpoints
 │   │   │   ├── tenantRoutes.ts     # /api/tenant endpoints
 │   │   │   └── userRoutes.ts       # /api/users endpoints
@@ -273,6 +284,12 @@ cd Elevate-B2B-CRM
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/app/sidebar-stats` | Private | Fetch real-time dynamic active leads & pending invoices badge counts |
+
+### 🔔 Notifications & Alerts (`/api/notifications`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/notifications` | Private | Fetch recent notifications (limit 20, newest first) for current tenant |
+| `PUT` | `/api/notifications/mark-all-read` | Private | Mark all unread notifications as read for current tenant |
 
 ### 📈 Leads Pipeline (`/api/leads`)
 | Method | Endpoint | Access | Description |
