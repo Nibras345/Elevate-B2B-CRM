@@ -11,8 +11,8 @@ import {
   Building2,
   CheckCircle2,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
-import { initialInvoices } from '../data/mockData';
 import { Modal } from '../components/common/Modal';
 import { Badge, BadgeVariant } from '../components/common/Badge';
 import { useNotification } from '../context/NotificationContext';
@@ -20,7 +20,9 @@ import { useAuth } from '../context/AuthContext';
 import { Invoice, InvoiceItem, InvoiceStatus, Client } from '../types';
 
 export const Invoices: React.FC = () => {
-  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
+  // STRICT RULE: No static or mock data. Initialize empty and fetch strictly from API.
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState<boolean>(true);
   const [searchParams] = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
 
@@ -95,11 +97,37 @@ export const Invoices: React.FC = () => {
     }
   }, [preselectedClientId]);
 
-  // Summary Metrics calculations
-  const totalInvoiced = invoices.reduce((acc, curr) => acc + curr.total, 0);
-  const paidTotal = invoices.filter(i => i.status === 'Paid').reduce((acc, curr) => acc + curr.total, 0);
-  const pendingTotal = invoices.filter(i => i.status === 'Pending').reduce((acc, curr) => acc + curr.total, 0);
-  const overdueTotal = invoices.filter(i => i.status === 'Overdue').reduce((acc, curr) => acc + curr.total, 0);
+  // Route 1: GET /api/invoices - Strict tenant isolation
+  const fetchInvoices = async () => {
+    try {
+      setIsLoadingInvoices(true);
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.get('/api/invoices', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success && Array.isArray(response.data.invoices)) {
+        setInvoices(response.data.invoices);
+      }
+    } catch (err: any) {
+      console.error('[Fetch Invoices Error]:', err);
+      notify(err.response?.data?.message || 'Failed to retrieve invoices ledger.', 'error');
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [user?.tenantId]);
+
+  // Summary Metrics calculations - Dynamically calculated from grandTotal of fetched invoices
+  const totalInvoiced = invoices.reduce((acc, curr) => acc + (Number(curr.grandTotal ?? curr.total) || 0), 0);
+  const paidTotal = invoices.filter(i => i.status === 'Paid').reduce((acc, curr) => acc + (Number(curr.grandTotal ?? curr.total) || 0), 0);
+  const pendingTotal = invoices.filter(i => i.status === 'Pending').reduce((acc, curr) => acc + (Number(curr.grandTotal ?? curr.total) || 0), 0);
+  const overdueTotal = invoices.filter(i => i.status === 'Overdue').reduce((acc, curr) => acc + (Number(curr.grandTotal ?? curr.total) || 0), 0);
 
   // Dynamic calculations in Generator
   const subtotal = items.reduce((acc, item) => acc + (Number(item.quantity) * Number(item.unitPrice) || 0), 0);
@@ -158,31 +186,9 @@ export const Invoices: React.FC = () => {
     const generatedId = `INV-2025-${String(invoices.length + 1).padStart(3, '0')}`;
     const today = new Date().toISOString().split('T')[0];
 
-    const newInvoice: Invoice = {
-      id: generatedId,
-      clientId: selectedClientId,
-      clientName,
-      company,
-      email,
-      issueDate: today,
-      dueDate: dueDate,
-      items: items.map(item => ({
-        ...item,
-        amount: Number(item.quantity) * Number(item.unitPrice),
-      })),
-      subtotal,
-      discount: discountAmount,
-      tax: taxAmount,
-      total: grandTotal,
-      status: 'Pending',
-      paymentTerms,
-      notes: invoiceNotes,
-    };
-
-    // Persist invoice in backend MongoDB database for accurate client invoiceCount metrics
     try {
       const token = localStorage.getItem('nexcrm_jwt_token');
-      await axios.post(
+      const response = await axios.post(
         '/api/invoices',
         {
           clientId: selectedClientId,
@@ -190,11 +196,16 @@ export const Invoices: React.FC = () => {
           company,
           email,
           invoiceNumber: generatedId,
-          dueDate,
-          items: newInvoice.items,
+          issueDate: today,
+          dueDate: dueDate,
+          items: items.map(item => ({
+            ...item,
+            amount: Number(item.quantity) * Number(item.unitPrice),
+          })),
           subtotal,
           discount: discountAmount,
           tax: taxAmount,
+          grandTotal,
           total: grandTotal,
           status: 'Pending',
           paymentTerms,
@@ -207,31 +218,77 @@ export const Invoices: React.FC = () => {
           },
         }
       );
-    } catch (apiErr) {
-      console.warn('[Invoice Persistence Warning]:', apiErr);
-    }
 
-    setInvoices([newInvoice, ...invoices]);
-    setIsGeneratorOpen(false);
-    setActiveInvoiceForPreview(newInvoice);
-    setIsPreviewOpen(true);
-    notify(`Invoice ${generatedId} created for ${company}!`, 'success');
+      if (response.data.success && response.data.invoice) {
+        const createdInv = response.data.invoice;
+        setInvoices(prev => [createdInv, ...prev]);
+        setIsGeneratorOpen(false);
+        setActiveInvoiceForPreview(createdInv);
+        setIsPreviewOpen(true);
+        notify(response.data.message || `Invoice ${createdInv.invoiceNumber || generatedId} created for ${company}!`, 'success');
+      }
+    } catch (apiErr: any) {
+      console.error('[Invoice Creation Error]:', apiErr);
+      notify(apiErr.response?.data?.message || 'Failed to create invoice.', 'error');
+    }
   };
 
-  // Mark as paid
-  const handleMarkPaid = (id: string) => {
-    setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'Paid' } : inv));
-    if (activeInvoiceForPreview && activeInvoiceForPreview.id === id) {
-      setActiveInvoiceForPreview(prev => (prev ? { ...prev, status: 'Paid' } : null));
+  // Route 2: PUT /api/invoices/:id/status - Mark invoice as paid
+  const handleMarkPaid = async (id: string) => {
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.put(
+        `/api/invoices/${id}/status`,
+        { status: 'Paid' },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Immediate local state update reflecting change without full page reload
+        setInvoices(prev =>
+          prev.map(inv => ((inv.id === id || (inv as any)._id === id) ? { ...inv, status: 'Paid' } : inv))
+        );
+        if (activeInvoiceForPreview && (activeInvoiceForPreview.id === id || (activeInvoiceForPreview as any)._id === id)) {
+          setActiveInvoiceForPreview(prev => (prev ? { ...prev, status: 'Paid' } : null));
+        }
+        notify(response.data.message || `Invoice marked as Paid`, 'success');
+      }
+    } catch (err: any) {
+      console.error('[Mark Paid Error]:', err);
+      notify(err.response?.data?.message || 'Failed to update invoice status.', 'error');
     }
-    notify(`Invoice ${id} marked as Paid`, 'success');
   };
 
-  // Delete invoice
-  const handleDeleteInvoice = (id: string) => {
-    setInvoices(prev => prev.filter(inv => inv.id !== id));
-    setIsPreviewOpen(false);
-    notify(`Invoice ${id} deleted`, 'info');
+  // Route 3: DELETE /api/invoices/:id - Delete invoice
+  const handleDeleteInvoice = async (id: string, invoiceNumber?: string) => {
+    const isConfirmed = window.confirm(`Are you sure you want to delete invoice ${invoiceNumber || id}?`);
+    if (!isConfirmed) return;
+
+    try {
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const response = await axios.delete(`/api/invoices/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setInvoices(prev => prev.filter(inv => inv.id !== id && (inv as any)._id !== id));
+        if (activeInvoiceForPreview && (activeInvoiceForPreview.id === id || (activeInvoiceForPreview as any)._id === id)) {
+          setIsPreviewOpen(false);
+          setActiveInvoiceForPreview(null);
+        }
+        notify(response.data.message || 'Invoice deleted successfully', 'info');
+      }
+    } catch (err: any) {
+      console.error('[Delete Invoice Error]:', err);
+      notify(err.response?.data?.message || 'Failed to delete invoice.', 'error');
+    }
   };
 
   // Print PDF Trigger
@@ -272,15 +329,27 @@ export const Invoices: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setIsGeneratorOpen(true);
-          }}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create New Invoice</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchInvoices}
+            disabled={isLoadingInvoices}
+            className="p-2.5 text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Refresh Invoices Ledger"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoadingInvoices ? 'animate-spin text-brand-600' : ''}`} />
+          </button>
+
+          <button
+            onClick={() => {
+              setIsGeneratorOpen(true);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create New Invoice</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}
@@ -351,8 +420,24 @@ export const Invoices: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-              {filteredInvoices.length > 0 ? (
+              {isLoadingInvoices ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+                      <span className="text-xs font-medium">Fetching verified billing ledger...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredInvoices.length > 0 ? (
                 filteredInvoices.map((inv) => {
+                  const invId = (inv as any)._id || inv.id;
+                  const invNumber = inv.invoiceNumber || inv.id;
+                  const populatedClient = inv.clientId && typeof inv.clientId === 'object' ? inv.clientId : null;
+                  const clientCompany = populatedClient?.companyName || inv.company || 'Enterprise Client';
+                  const clientContact = populatedClient?.contactName || inv.clientName || 'Primary Contact';
+                  const totalAmount = Number(inv.grandTotal ?? inv.total) || 0;
+
                   let statusBadge: BadgeVariant = 'neutral';
                   if (inv.status === 'Paid') statusBadge = 'success';
                   if (inv.status === 'Pending') statusBadge = 'warning';
@@ -360,7 +445,7 @@ export const Invoices: React.FC = () => {
 
                   return (
                     <tr
-                      key={inv.id}
+                      key={invId}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
                       onClick={() => {
                         setActiveInvoiceForPreview(inv);
@@ -369,16 +454,16 @@ export const Invoices: React.FC = () => {
                     >
                       {/* Invoice ID */}
                       <td className="py-4 px-4 sm:px-6 font-mono font-bold text-slate-900 dark:text-white group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
-                        {inv.id}
+                        {invNumber}
                       </td>
 
                       {/* Client & Company */}
                       <td className="py-4 px-4">
                         <span className="font-bold text-slate-900 dark:text-white block">
-                          {inv.company}
+                          {clientCompany}
                         </span>
                         <span className="text-[11px] text-slate-400 block mt-0.5">
-                          Attn: {inv.clientName}
+                          Attn: {clientContact}
                         </span>
                       </td>
 
@@ -395,10 +480,10 @@ export const Invoices: React.FC = () => {
                       {/* Amount */}
                       <td className="py-4 px-4">
                         <span className="font-extrabold text-slate-900 dark:text-white text-sm block">
-                          ${inv.total.toLocaleString()}
+                          ${totalAmount.toLocaleString()}
                         </span>
                         <span className="text-[10px] text-slate-400 block">
-                          {inv.items.length} line {inv.items.length === 1 ? 'item' : 'items'}
+                          {inv.items?.length || 1} line {(inv.items?.length || 1) === 1 ? 'item' : 'items'}
                         </span>
                       </td>
 
@@ -425,7 +510,7 @@ export const Invoices: React.FC = () => {
 
                           {inv.status !== 'Paid' && (
                             <button
-                              onClick={() => handleMarkPaid(inv.id)}
+                              onClick={() => handleMarkPaid(invId)}
                               title="Mark as Paid"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                             >
@@ -434,7 +519,7 @@ export const Invoices: React.FC = () => {
                           )}
 
                           <button
-                            onClick={() => handleDeleteInvoice(inv.id)}
+                            onClick={() => handleDeleteInvoice(invId, invNumber)}
                             title="Delete Invoice"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                           >
@@ -447,8 +532,28 @@ export const Invoices: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
-                    No invoices found matching "{searchQuery}"
+                  <td colSpan={7} className="py-16 text-center">
+                    <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                        <Printer className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
+                        {searchQuery ? 'No matching invoices found' : 'No electronic invoices issued yet'}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                        {searchQuery
+                          ? `No invoices matched "${searchQuery}". Try adjusting your filters.`
+                          : 'Generate itemized billing for converted enterprise clients directly from this dashboard.'}
+                      </p>
+                      {!searchQuery && (
+                        <button
+                          onClick={() => setIsGeneratorOpen(true)}
+                          className="mt-4 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+                        >
+                          + Create First Invoice
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
@@ -713,7 +818,7 @@ export const Invoices: React.FC = () => {
               <div className="flex items-center gap-2">
                 {activeInvoiceForPreview.status !== 'Paid' && (
                   <button
-                    onClick={() => handleMarkPaid(activeInvoiceForPreview.id)}
+                    onClick={() => handleMarkPaid((activeInvoiceForPreview as any)._id || activeInvoiceForPreview.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
@@ -757,7 +862,7 @@ export const Invoices: React.FC = () => {
                     INVOICE
                   </span>
                   <span className="text-sm font-mono font-bold text-slate-800 dark:text-slate-200 block mt-0.5">
-                    {activeInvoiceForPreview.id}
+                    {activeInvoiceForPreview.invoiceNumber || activeInvoiceForPreview.id}
                   </span>
                   <span className="text-xs text-slate-400 block mt-1">
                     Issue Date: {activeInvoiceForPreview.issueDate}
@@ -811,7 +916,7 @@ export const Invoices: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {activeInvoiceForPreview.items.map((item, idx) => (
+                    {(activeInvoiceForPreview.items || []).map((item, idx) => (
                       <tr key={idx}>
                         <td className="py-3 font-semibold text-slate-800 dark:text-slate-200">
                           {item.description}
@@ -820,10 +925,10 @@ export const Invoices: React.FC = () => {
                           {item.quantity}
                         </td>
                         <td className="py-3 text-right text-slate-600 dark:text-slate-400">
-                          ${item.unitPrice.toLocaleString()}
+                          ${(Number(item.unitPrice) || 0).toLocaleString()}
                         </td>
                         <td className="py-3 text-right font-bold text-slate-900 dark:text-white">
-                          ${item.amount.toLocaleString()}
+                          ${(Number(item.amount) || 0).toLocaleString()}
                         </td>
                       </tr>
                     ))}
@@ -837,15 +942,15 @@ export const Invoices: React.FC = () => {
                   <div className="flex justify-between text-slate-500">
                     <span>Subtotal:</span>
                     <span className="font-semibold text-slate-900 dark:text-white">
-                      ${activeInvoiceForPreview.subtotal.toLocaleString()}
+                      ${(Number(activeInvoiceForPreview.subtotal) || 0).toLocaleString()}
                     </span>
                   </div>
 
-                  {activeInvoiceForPreview.discount > 0 && (
+                  {Number(activeInvoiceForPreview.discount) > 0 && (
                     <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                       <span>Discount:</span>
                       <span className="font-semibold">
-                        -${activeInvoiceForPreview.discount.toLocaleString()}
+                        -${(Number(activeInvoiceForPreview.discount) || 0).toLocaleString()}
                       </span>
                     </div>
                   )}
@@ -853,14 +958,14 @@ export const Invoices: React.FC = () => {
                   <div className="flex justify-between text-slate-500">
                     <span>Tax:</span>
                     <span className="font-semibold text-slate-900 dark:text-white">
-                      +${activeInvoiceForPreview.tax.toLocaleString()}
+                      +${(Number(activeInvoiceForPreview.tax) || 0).toLocaleString()}
                     </span>
                   </div>
 
                   <div className="pt-2 border-t-2 border-slate-200 dark:border-slate-800 flex justify-between text-base font-extrabold text-slate-900 dark:text-white">
                     <span>Total Due:</span>
                     <span className="text-brand-600 dark:text-brand-400">
-                      ${activeInvoiceForPreview.total.toLocaleString()}
+                      ${(Number(activeInvoiceForPreview.grandTotal ?? activeInvoiceForPreview.total) || 0).toLocaleString()}
                     </span>
                   </div>
                 </div>

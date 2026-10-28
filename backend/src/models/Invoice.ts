@@ -9,7 +9,7 @@ export interface IInvoiceItem {
 
 export interface IInvoice extends Document {
   tenantId: mongoose.Types.ObjectId;
-  clientId: mongoose.Types.ObjectId | string;
+  clientId: mongoose.Types.ObjectId | any;
   clientName?: string;
   company?: string;
   email?: string;
@@ -20,6 +20,7 @@ export interface IInvoice extends Document {
   subtotal: number;
   discount: number;
   tax: number;
+  grandTotal: number;
   total: number;
   status: 'Paid' | 'Pending' | 'Overdue';
   paymentTerms: string;
@@ -47,7 +48,8 @@ const InvoiceSchema = new Schema<IInvoice>(
       index: true,
     },
     clientId: {
-      type: Schema.Types.Mixed, // Supports ObjectId or String clientId
+      type: Schema.Types.ObjectId,
+      ref: 'Client',
       required: true,
       index: true,
     },
@@ -94,9 +96,13 @@ const InvoiceSchema = new Schema<IInvoice>(
       type: Number,
       default: 0,
     },
-    total: {
+    grandTotal: {
       type: Number,
       required: true,
+      default: 0,
+    },
+    total: {
+      type: Number,
       default: 0,
     },
     status: {

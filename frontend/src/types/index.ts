@@ -73,7 +73,9 @@ export interface InvoiceItem {
 
 export interface Invoice {
   id: string;
-  clientId: string;
+  _id?: string;
+  invoiceNumber?: string;
+  clientId: string | any;
   clientName: string;
   company: string;
   email: string;
@@ -84,6 +86,7 @@ export interface Invoice {
   discount: number;
   tax: number;
   total: number;
+  grandTotal?: number;
   status: InvoiceStatus;
   paymentTerms: string;
   notes: string;
