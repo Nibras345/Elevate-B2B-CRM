@@ -171,3 +171,33 @@ export interface ActivityItem {
   time: string;
   type: 'deal' | 'invoice' | 'lead' | 'client' | 'payment';
 }
+
+export interface TopMetrics {
+  totalRevenue: number;
+  totalRevenueFormatted: string;
+  activeLeads: number;
+  dealsClosed: number;
+  totalLeads: number;
+  conversionRate: number;
+  conversionRateFormatted: string;
+}
+
+export interface DashboardData {
+  success: boolean;
+  tenantId?: string;
+  topMetrics: TopMetrics;
+  kpis: KPIItem[];
+  actual_revenue: number[];
+  target_quota: number[];
+  monthlyRevenue: RevenueDataPoint[];
+  revenuePerformance?: {
+    actual_revenue: number[];
+    target_quota: number[];
+    monthlyRevenue: RevenueDataPoint[];
+  };
+  leadsByStage: StageFunnelItem[];
+  stageFunnel: StageFunnelItem[];
+  totalPipelineValue: number;
+  totalPipelineValueFormatted: string;
+  recentActivities: ActivityItem[];
+}
