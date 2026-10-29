@@ -71,7 +71,7 @@ const ClientSchema: Schema<IClient> = new Schema(
     },
     industry: {
       type: String,
-      default: 'Enterprise Software',
+      default: '',
     },
     city: {
       type: String,
@@ -79,7 +79,7 @@ const ClientSchema: Schema<IClient> = new Schema(
     },
     country: {
       type: String,
-      default: 'United States',
+      default: '',
     },
     openDealsCount: {
       type: Number,

@@ -18,7 +18,6 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useNotification } from '../../context/NotificationContext';
-import { Role } from '../../types';
 
 interface NavbarProps {
   setIsMobileOpen: (open: boolean) => void;
@@ -57,7 +56,7 @@ const formatTimeAgo = (dateInput: string | Date | undefined): string => {
 };
 
 export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch }) => {
-  const { user, tenantSettings, logout, switchRole } = useAuth();
+  const { user, tenantSettings, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { notify } = useNotification();
   const navigate = useNavigate();
@@ -131,11 +130,6 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
     navigate('/login');
   };
 
-  const handleRoleToggle = (targetRole: Role) => {
-    switchRole(targetRole);
-    notify(`Simulated role switched to: ${targetRole}`, 'success');
-  };
-
   const markAllNotificationsAsRead = async () => {
     try {
       const token = localStorage.getItem('nexcrm_jwt_token');
@@ -200,7 +194,7 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
         {/* Tenant Indicator pill */}
         <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300">
           <Building className="w-3.5 h-3.5 text-brand-500" />
-          <span className="truncate max-w-[150px]">{tenantSettings?.companyName || user.companyName}</span>
+          <span className="truncate max-w-[150px]">{tenantSettings?.companyName || user?.companyName || 'Workspace'}</span>
         </div>
 
         {/* Theme Toggle Button */}
@@ -314,7 +308,7 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
 
               <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-center">
                 <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Showing recent alerts for Tenant {user.tenantId}
+                  Showing recent alerts for Tenant {user?.tenantId || ''}
                 </span>
               </div>
             </div>
@@ -328,19 +322,25 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
             className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all group cursor-pointer"
           >
             <div className="relative">
-              <img
-                src={user.avatar}
-                alt={user.name}
-                className="w-9 h-9 rounded-xl object-cover ring-2 ring-brand-500/30 group-hover:ring-brand-500 transition-all shadow-sm"
-              />
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user?.name || 'User Profile'}
+                  className="w-9 h-9 rounded-xl object-cover ring-2 ring-brand-500/30 group-hover:ring-brand-500 transition-all shadow-sm"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-brand-500/30 shadow-sm">
+                  {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
               <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
             </div>
             <div className="hidden md:flex flex-col text-left">
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">
-                {user.name}
+                {user?.name || 'User'}
               </span>
               <span className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-                {user.role}
+                {user?.role || 'User'}
               </span>
             </div>
           </button>
@@ -350,20 +350,26 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
               {/* Profile Card Header */}
               <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={user.avatar}
-                    alt={user.name}
-                    className="w-11 h-11 rounded-xl object-cover shadow-sm ring-2 ring-brand-500/20"
-                  />
+                  {user?.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user?.name || 'User'}
+                      className="w-11 h-11 rounded-xl object-cover shadow-sm ring-2 ring-brand-500/20"
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-brand-500/20">
+                      {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
                   <div className="truncate">
                     <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                      {user.name}
+                      {user?.name || 'User'}
                     </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user?.email || ''}</p>
                     <div className="flex items-center gap-1.5 mt-1">
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
                         <Shield className="w-3 h-3" />
-                        {user.role}
+                        {user?.role || 'User'}
                       </span>
                     </div>
                   </div>
@@ -371,37 +377,8 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
                 <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                   <span>Organization:</span>
                   <span className="font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[140px]">
-                    {user.companyName}
+                    {tenantSettings?.companyName || user?.companyName || 'Workspace'}
                   </span>
-                </div>
-              </div>
-
-              {/* Simulation: Switch Role toggle */}
-              <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-brand-50/40 dark:bg-brand-950/20">
-                <p className="text-[11px] font-semibold text-brand-700 dark:text-brand-300 uppercase tracking-wider mb-2">
-                  Simulation: Switch Role
-                </p>
-                <div className="grid grid-cols-2 gap-1.5 bg-slate-200/60 dark:bg-slate-800 p-1 rounded-xl">
-                  <button
-                    onClick={() => handleRoleToggle('Company Admin')}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                      user.role === 'Company Admin'
-                        ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                    }`}
-                  >
-                    Admin
-                  </button>
-                  <button
-                    onClick={() => handleRoleToggle('Employee')}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                      user.role === 'Employee'
-                        ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                    }`}
-                  >
-                    Employee
-                  </button>
                 </div>
               </div>
 

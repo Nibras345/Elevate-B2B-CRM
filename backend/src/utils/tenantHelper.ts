@@ -42,9 +42,14 @@ export const getTenantContext = async (req: AuthRequest): Promise<TenantContext>
     };
   }
 
-  // 4. Fallback: Create Tenant record if missing
+  // 4. Provision Tenant record if company name is provided
+  const companyName = req.user?.companyName?.trim();
+  if (!companyName) {
+    throw new Error('Cannot provision tenant without a valid, user-provided company name.');
+  }
+
   const newTenant = await Tenant.create({
-    name: req.user?.companyName || 'Enterprise Workspace',
+    name: companyName,
     tenantId: rawTenantId,
     currency: 'USD ($)',
     defaultTaxRate: 10,

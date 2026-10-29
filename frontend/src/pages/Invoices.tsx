@@ -36,16 +36,15 @@ export const Invoices: React.FC = () => {
   // Generator Modal state
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
-  const [dueDate, setDueDate] = useState('2025-04-15');
+  const [dueDate, setDueDate] = useState(() =>
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
   const [paymentTerms, setPaymentTerms] = useState('Net 30 Days');
   const [taxPercent, setTaxPercent] = useState(10);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [invoiceNotes, setInvoiceNotes] = useState('Thank you for partnering with us. Payment is due within 30 days of issuance.');
 
-  const [items, setItems] = useState<InvoiceItem[]>([
-    { id: '1', description: 'Enterprise Platform Subscription (Quarterly)', quantity: 1, unitPrice: 24000, amount: 24000 },
-    { id: '2', description: 'Dedicated Solution Architect & Onboarding', quantity: 1, unitPrice: 8500, amount: 8500 },
-  ]);
+  const [items, setItems] = useState<InvoiceItem[]>([]);
 
   // Preview Modal state
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -150,10 +149,6 @@ export const Invoices: React.FC = () => {
 
   // Remove Item Row
   const handleRemoveItem = (id: string) => {
-    if (items.length <= 1) {
-      notify('An invoice must have at least one line item', 'warning');
-      return;
-    }
     setItems(items.filter(item => item.id !== id));
   };
 
@@ -176,6 +171,11 @@ export const Invoices: React.FC = () => {
     e.preventDefault();
     if (!selectedClientId) {
       notify('Please select an enterprise client', 'warning');
+      return;
+    }
+
+    if (items.length === 0) {
+      notify('Please add at least one line item to the invoice', 'warning');
       return;
     }
 
@@ -654,57 +654,71 @@ export const Invoices: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs"
-                >
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Item description or service..."
-                      value={item.description}
-                      onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                    />
-                  </div>
-
-                  <div className="w-20">
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Qty"
-                      value={item.quantity}
-                      onChange={(e) => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
-                      className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-center"
-                    />
-                  </div>
-
-                  <div className="w-28">
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="Unit Price"
-                      value={item.unitPrice}
-                      onChange={(e) => handleUpdateItem(item.id, 'unitPrice', Number(e.target.value))}
-                      className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                    />
-                  </div>
-
-                  <div className="w-24 text-right font-bold text-slate-800 dark:text-slate-200">
-                    ${((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toLocaleString()}
-                  </div>
-
+              {items.length === 0 ? (
+                <div className="p-6 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center bg-slate-50/50 dark:bg-slate-800/30">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">No line items added yet.</p>
                   <button
                     type="button"
-                    onClick={() => handleRemoveItem(item.id)}
-                    className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer"
+                    onClick={handleAddItem}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-600 dark:bg-brand-950/40 dark:hover:bg-brand-950/60 dark:text-brand-400 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add First Line Item</span>
                   </button>
                 </div>
-              ))}
+              ) : (
+                items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs"
+                  >
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Item description or service..."
+                        value={item.description}
+                        onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                      />
+                    </div>
+
+                    <div className="w-20">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Qty"
+                        value={item.quantity}
+                        onChange={(e) => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
+                        className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-center"
+                      />
+                    </div>
+
+                    <div className="w-28">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Unit Price"
+                        value={item.unitPrice}
+                        onChange={(e) => handleUpdateItem(item.id, 'unitPrice', Number(e.target.value))}
+                        className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                      />
+                    </div>
+
+                    <div className="w-24 text-right font-bold text-slate-800 dark:text-slate-200">
+                      ${((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toLocaleString()}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(item.id)}
+                      className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -849,14 +863,16 @@ export const Invoices: React.FC = () => {
                   </div>
                   <div>
                     <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-                      {tenantSettings?.companyName || user.companyName}
+                      {tenantSettings?.companyName || user?.companyName || 'Enterprise Workspace'}
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Tenant Partition: {user.tenantId}
+                      Tenant Partition: {user?.tenantId || ''}
                     </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {tenantSettings?.address || '100 Montgomery St, Suite 1800, San Francisco, CA'}
-                    </p>
+                    {tenantSettings?.address && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {tenantSettings.address}
+                      </p>
+                    )}
                   </div>
                 </div>
 

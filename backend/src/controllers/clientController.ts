@@ -283,3 +283,125 @@ export const deleteClient = async (
     next(error);
   }
 };
+
+/**
+ * @route   GET /api/clients/:id/history
+ * @desc    Fetch real audit trail and historical events (Invoices + Leads) for a specific client
+ * @access  Private (JWT Protected)
+ */
+export const getClientHistory = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { tenantObjectId } = await getTenantContext(req);
+
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid client ID format.',
+      });
+      return;
+    }
+
+    const client = await Client.findOne({ _id: id, tenantId: tenantObjectId }).lean();
+    if (!client) {
+      res.status(404).json({
+        success: false,
+        message: 'Client not found in this tenant workspace.',
+      });
+      return;
+    }
+
+    const formatUSD = (val: number): string =>
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(val || 0);
+
+    // Fetch actual Invoices and Leads for this client
+    const [clientInvoices, clientLeads] = await Promise.all([
+      Invoice.find({
+        tenantId: tenantObjectId,
+        $or: [
+          { clientId: client._id },
+          { clientId: client._id.toString() },
+          { email: client.email },
+        ],
+      })
+        .sort({ createdAt: -1 })
+        .lean(),
+      Lead.find({
+        tenantId: tenantObjectId,
+        $or: [
+          { email: client.email },
+          { companyName: client.companyName },
+        ],
+      })
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
+
+    const invoiceEvents = clientInvoices.map((inv: any) => {
+      const dateObj = new Date(inv.issueDate || inv.createdAt);
+      return {
+        id: `hist-inv-${inv._id}`,
+        title: inv.status === 'Paid'
+          ? `Invoice ${inv.invoiceNumber || 'INV'} Settled & Paid`
+          : `Invoice ${inv.invoiceNumber || 'INV'} Generated`,
+        date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        desc: `Status: ${inv.status} (${inv.paymentTerms || 'Net 30 Days'})`,
+        amount: formatUSD(inv.grandTotal ?? inv.total ?? 0),
+        timestamp: dateObj.getTime(),
+        type: 'invoice',
+        status: inv.status,
+      };
+    });
+
+    const leadEvents = clientLeads.map((lead: any) => {
+      const dateObj = new Date(lead.updatedAt || lead.createdAt);
+      const isWon = lead.stage === 'Won / Closed' || lead.stage === 'Won';
+      return {
+        id: `hist-lead-${lead._id}`,
+        title: isWon
+          ? 'Lead Opportunity Won & Converted'
+          : `Pipeline Opportunity: ${lead.stage}`,
+        date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        desc: lead.lastActivity || `Managed by ${lead.assignedTo?.name || 'Sales Agent'} (${lead.priority} priority)`,
+        amount: formatUSD(lead.estimatedValue || 0),
+        timestamp: dateObj.getTime(),
+        type: 'lead',
+        stage: lead.stage,
+      };
+    });
+
+    // Client Onboarding milestone
+    const clientCreatedDate = new Date(client.convertedAt || client.createdAt);
+    const onboardingEvent = {
+      id: `hist-client-${client._id}`,
+      title: 'Client Relationship Established',
+      date: clientCreatedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      desc: `Onboarded into workspace with lifetime value recorded as ${formatUSD(client.lifetimeValue || 0)}`,
+      amount: client.lifetimeValue ? formatUSD(client.lifetimeValue) : null,
+      timestamp: clientCreatedDate.getTime(),
+      type: 'client',
+    };
+
+    const combinedHistory = [...invoiceEvents, ...leadEvents, onboardingEvent]
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    res.status(200).json({
+      success: true,
+      clientId: client._id,
+      history: combinedHistory,
+      invoices: clientInvoices,
+      leads: clientLeads,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

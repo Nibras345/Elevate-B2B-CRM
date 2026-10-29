@@ -173,7 +173,7 @@ export const Dashboard: React.FC = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Real-time pipeline analytics, revenue forecasting, and activity for {user?.companyName || 'Enterprise Workspace'}
+            Real-time pipeline analytics, revenue forecasting, and activity for {user?.companyName || 'your workspace'}
           </p>
         </div>
 
@@ -463,11 +463,17 @@ export const Dashboard: React.FC = () => {
                   key={act.id}
                   className="flex items-start gap-3.5 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
                 >
-                  <img
-                    src={act.avatar}
-                    alt={act.user}
-                    className="w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100 dark:ring-slate-800 shrink-0 mt-0.5"
-                  />
+                  {act.avatar ? (
+                    <img
+                      src={act.avatar}
+                      alt={act.user}
+                      className="w-9 h-9 rounded-xl object-cover ring-2 ring-slate-100 dark:ring-slate-800 shrink-0 mt-0.5"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xs ring-2 ring-slate-100 dark:ring-slate-800 shrink-0 mt-0.5 shadow-xs">
+                      {act.user ? act.user.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-2">
                       <p className="text-xs text-slate-800 dark:text-slate-200">

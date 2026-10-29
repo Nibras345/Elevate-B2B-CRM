@@ -44,16 +44,28 @@ export const Clients: React.FC = () => {
     phone: '',
     ltv: '',
     status: 'Active' as ClientStatus,
-    industry: 'Enterprise Software',
+    industry: '',
     address: '',
     city: '',
-    country: 'United States',
+    country: '',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Client History Drawer
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
+  const [clientHistory, setClientHistory] = useState<Array<{
+    id: string;
+    title: string;
+    date: string;
+    desc: string;
+    amount: string | null;
+    timestamp: number;
+    type: 'invoice' | 'lead' | 'client';
+    status?: string;
+    stage?: string;
+  }>>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
 
   // Edit Client Modal
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -88,6 +100,40 @@ export const Clients: React.FC = () => {
   useEffect(() => {
     fetchClients();
   }, [user?.tenantId]);
+
+  // Dynamic Client History Fetch
+  useEffect(() => {
+    const fetchClientHistory = async () => {
+      if (!isHistoryDrawerOpen || !selectedClientForHistory) {
+        setClientHistory([]);
+        return;
+      }
+      const clientId = selectedClientForHistory.id || (selectedClientForHistory as any)._id;
+      if (!clientId) return;
+
+      try {
+        setIsLoadingHistory(true);
+        const token = localStorage.getItem('nexcrm_jwt_token');
+        const response = await axios.get(`/api/clients/${clientId}/history`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (response.data.success && Array.isArray(response.data.history)) {
+          setClientHistory(response.data.history);
+        } else {
+          setClientHistory([]);
+        }
+      } catch (err: any) {
+        console.error('[Fetch Client History Error]:', err);
+        setClientHistory([]);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    fetchClientHistory();
+  }, [isHistoryDrawerOpen, selectedClientForHistory]);
 
   // Filter clients
   const filteredClients = clients
@@ -878,44 +924,36 @@ export const Clients: React.FC = () => {
               </h4>
 
               <div className="space-y-3">
-                {[
-                  {
-                    title: 'Enterprise Subscription Invoiced',
-                    date: 'Feb 28, 2025',
-                    desc: 'Generated and processed annual recurring contract',
-                    amount: '$64,000',
-                  },
-                  {
-                    title: 'Account Executive QBR Completed',
-                    date: 'Jan 15, 2025',
-                    desc: 'Reviewed seat utilization and API integration metrics',
-                    amount: null,
-                  },
-                  {
-                    title: 'Initial Tenant Onboarding Executed',
-                    date: 'Oct 10, 2024',
-                    desc: 'Master Agreement executed and database instance provisioned',
-                    amount: '$42,000',
-                  },
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3"
-                  >
-                    <div>
-                      <span className="font-bold text-xs text-slate-900 dark:text-white block">
-                        {item.title}
-                      </span>
-                      <span className="text-[11px] text-slate-500 mt-0.5 block">{item.desc}</span>
-                      <span className="text-[10px] text-slate-400 mt-1 block">{item.date}</span>
-                    </div>
-                    {item.amount && (
-                      <span className="font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                        {item.amount}
-                      </span>
-                    )}
+                {isLoadingHistory ? (
+                  <div className="py-8 flex flex-col items-center justify-center text-center">
+                    <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+                    <span className="text-xs text-slate-400">Loading audit history...</span>
                   </div>
-                ))}
+                ) : clientHistory.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-center">
+                    <p className="text-xs text-slate-400">No historical transactions or lead conversions recorded yet.</p>
+                  </div>
+                ) : (
+                  clientHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <div>
+                        <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                          {item.title}
+                        </span>
+                        <span className="text-[11px] text-slate-500 mt-0.5 block">{item.desc}</span>
+                        <span className="text-[10px] text-slate-400 mt-1 block">{item.date}</span>
+                      </div>
+                      {item.amount && (
+                        <span className="font-bold text-xs text-emerald-600 dark:text-emerald-400 shrink-0">
+                          {item.amount}
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

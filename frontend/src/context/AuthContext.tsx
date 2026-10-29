@@ -15,42 +15,17 @@ export interface AuthResponse {
 }
 
 interface AuthContextType {
-  user: UserProfile;
-  tenantSettings: TenantSettings;
+  user: UserProfile | null;
+  tenantSettings: TenantSettings | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   token: string | null;
   login: (email?: string, password?: string, role?: Role) => Promise<AuthResponse>;
   register: (params: RegisterParams) => Promise<AuthResponse>;
   logout: () => Promise<void>;
-  switchRole: (newRole: Role) => void;
   updateProfile: (data: Partial<UserProfile>) => void;
   updateTenant: (data: Partial<TenantSettings>) => void;
 }
-
-const DEFAULT_USER: UserProfile = {
-  id: 'usr_init',
-  name: 'Sarah Connor',
-  email: 'sarah.admin@apexcorp.com',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  role: 'Company Admin',
-  companyName: 'Apex Global Dynamics',
-  tenantId: 'TNT-APEX-2077',
-  department: 'Executive Management',
-  joinedDate: 'Oct 2026',
-};
-
-const DEFAULT_TENANT_SETTINGS: TenantSettings = {
-  companyName: 'Apex Global Dynamics',
-  tenantId: 'TNT-APEX-2077',
-  logoUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80',
-  currency: 'USD ($)',
-  fiscalYear: 'Jan - Dec',
-  defaultTaxRate: 10,
-  invoiceTerms: 'Net 30 Days',
-  address: '100 Montgomery St, Suite 1800, San Francisco, CA 94104',
-  website: 'https://apexcorp.com',
-};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -58,14 +33,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('nexcrm_jwt_token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const [user, setUser] = useState<UserProfile>(() => {
+  const [user, setUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem('nexcrm_user');
-    return saved ? JSON.parse(saved) : DEFAULT_USER;
+    return saved ? JSON.parse(saved) : null;
   });
 
-  const [tenantSettings, setTenantSettings] = useState<TenantSettings>(() => {
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(() => {
     const saved = localStorage.getItem('nexcrm_tenant');
-    return saved ? JSON.parse(saved) : DEFAULT_TENANT_SETTINGS;
+    return saved ? JSON.parse(saved) : null;
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -79,6 +54,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!savedToken) {
         setIsLoading(false);
         setIsAuthenticated(false);
+        setUser(null);
+        setTenantSettings(null);
+        localStorage.removeItem('nexcrm_user');
+        localStorage.removeItem('nexcrm_tenant');
         return;
       }
 
@@ -97,13 +76,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             name: u.fullName || u.name,
             fullName: u.fullName || u.name,
             email: u.email,
-            avatar: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
-            profilePicture: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
+            avatar: u.profilePicture || u.avatar || '',
+            profilePicture: u.profilePicture || u.avatar || '',
             phone: u.phone || '',
             role: u.role,
-            companyName: u.companyName || (data.tenant ? data.tenant.name : 'Enterprise Workspace'),
+            companyName: u.companyName || (data.tenant ? data.tenant.name : ''),
             tenantId: u.tenantId,
-            department: u.department || 'Executive Management',
+            department: u.department || '',
             joinedDate: 'Active Member',
           };
 
@@ -113,7 +92,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setTenantSettings({
               companyName: data.tenant.name,
               tenantId: data.tenant.tenantId,
-              logoUrl: data.tenant.logoUrl || DEFAULT_TENANT_SETTINGS.logoUrl,
+              logoUrl: data.tenant.logoUrl || '',
               currency: data.tenant.currency || 'USD ($)',
               fiscalYear: data.tenant.fiscalYear || 'Jan - Dec',
               defaultTaxRate: data.tenant.defaultTaxRate ?? 10,
@@ -126,7 +105,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } else {
           // Token invalid or expired
           localStorage.removeItem('nexcrm_jwt_token');
+          localStorage.removeItem('nexcrm_user');
+          localStorage.removeItem('nexcrm_tenant');
           setToken(null);
+          setUser(null);
+          setTenantSettings(null);
           setIsAuthenticated(false);
         }
       } catch (err) {
@@ -141,11 +124,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Sync state to localStorage
   useEffect(() => {
-    localStorage.setItem('nexcrm_user', JSON.stringify(user));
+    if (user) {
+      localStorage.setItem('nexcrm_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('nexcrm_user');
+    }
   }, [user]);
 
   useEffect(() => {
-    localStorage.setItem('nexcrm_tenant', JSON.stringify(tenantSettings));
+    if (tenantSettings) {
+      localStorage.setItem('nexcrm_tenant', JSON.stringify(tenantSettings));
+    } else {
+      localStorage.removeItem('nexcrm_tenant');
+    }
   }, [tenantSettings]);
 
   const login = async (email?: string, password?: string, _role?: Role): Promise<AuthResponse> => {
@@ -179,20 +170,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         name: u.fullName || u.name,
         fullName: u.fullName || u.name,
         email: u.email,
-        avatar: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
-        profilePicture: u.profilePicture || u.avatar || DEFAULT_USER.avatar,
+        avatar: u.profilePicture || u.avatar || '',
+        profilePicture: u.profilePicture || u.avatar || '',
         phone: u.phone || '',
         role: u.role,
-        companyName: u.companyName || t?.name || 'Enterprise Workspace',
+        companyName: u.companyName || t?.name || '',
         tenantId: u.tenantId,
-        department: u.department || 'Executive Management',
+        department: u.department || '',
         joinedDate: 'Active Member',
       };
 
       const tenantInfo: TenantSettings = {
         companyName: t?.name || userProfile.companyName,
         tenantId: t?.tenantId || userProfile.tenantId,
-        logoUrl: t?.logoUrl || DEFAULT_TENANT_SETTINGS.logoUrl,
+        logoUrl: t?.logoUrl || '',
         currency: t?.currency || 'USD ($)',
         fiscalYear: t?.fiscalYear || 'Jan - Dec',
         defaultTaxRate: t?.defaultTaxRate ?? 10,
@@ -259,18 +250,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         id: u.id || u._id,
         name: u.name,
         email: u.email,
-        avatar: u.avatar || DEFAULT_USER.avatar,
+        avatar: u.avatar || '',
         role: u.role,
         companyName: u.companyName || t?.name || companyName,
         tenantId: u.tenantId,
-        department: u.department || 'Executive Management',
+        department: u.department || '',
         joinedDate: 'Just now',
       };
 
       const tenantInfo: TenantSettings = {
         companyName: t?.name || companyName,
         tenantId: t?.tenantId || u.tenantId,
-        logoUrl: t?.logoUrl || DEFAULT_TENANT_SETTINGS.logoUrl,
+        logoUrl: t?.logoUrl || '',
         currency: t?.currency || 'USD ($)',
         fiscalYear: t?.fiscalYear || 'Jan - Dec',
         defaultTaxRate: t?.defaultTaxRate ?? 10,
@@ -302,25 +293,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Ignore network errors on logout
     }
     localStorage.removeItem('nexcrm_jwt_token');
+    localStorage.removeItem('nexcrm_user');
+    localStorage.removeItem('nexcrm_tenant');
     setToken(null);
+    setUser(null);
+    setTenantSettings(null);
     setIsAuthenticated(false);
   };
 
-  const switchRole = (newRole: Role) => {
-    setUser(prev => ({
-      ...prev,
-      role: newRole,
-    }));
-  };
-
   const updateProfile = (data: Partial<UserProfile>) => {
-    setUser(prev => ({ ...prev, ...data }));
+    setUser(prev => (prev ? { ...prev, ...data } : null));
   };
 
   const updateTenant = (data: Partial<TenantSettings>) => {
-    setTenantSettings(prev => ({ ...prev, ...data }));
+    setTenantSettings(prev => (prev ? { ...prev, ...data } : null));
     if (data.companyName) {
-      setUser(prev => ({ ...prev, companyName: data.companyName! }));
+      setUser(prev => (prev ? { ...prev, companyName: data.companyName! } : null));
     }
   };
 
@@ -335,7 +323,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         register,
         logout,
-        switchRole,
         updateProfile,
         updateTenant,
       }}

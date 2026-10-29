@@ -48,15 +48,31 @@ export const Settings: React.FC = () => {
 
   // Company Settings Form State
   const [companyForm, setCompanyForm] = useState({
-    companyName: tenantSettings?.companyName || user.companyName,
-    tenantId: tenantSettings?.tenantId || user.tenantId,
+    companyName: tenantSettings?.companyName || user?.companyName || '',
+    tenantId: tenantSettings?.tenantId || user?.tenantId || '',
     currency: tenantSettings?.currency || 'USD ($)',
     fiscalYear: tenantSettings?.fiscalYear || 'Jan - Dec',
-    defaultTaxRate: tenantSettings?.defaultTaxRate || 10,
+    defaultTaxRate: tenantSettings?.defaultTaxRate ?? 10,
     invoiceTerms: tenantSettings?.invoiceTerms || 'Net 30 Days',
-    address: tenantSettings?.address || '100 Montgomery St, Suite 1800, San Francisco, CA',
-    website: tenantSettings?.website || 'https://apexhorizon.com',
+    address: tenantSettings?.address || '',
+    website: tenantSettings?.website || '',
   });
+
+  // Keep companyForm in sync when tenantSettings or user loads
+  useEffect(() => {
+    if (tenantSettings) {
+      setCompanyForm({
+        companyName: tenantSettings.companyName || user?.companyName || '',
+        tenantId: tenantSettings.tenantId || user?.tenantId || '',
+        currency: tenantSettings.currency || 'USD ($)',
+        fiscalYear: tenantSettings.fiscalYear || 'Jan - Dec',
+        defaultTaxRate: tenantSettings.defaultTaxRate ?? 10,
+        invoiceTerms: tenantSettings.invoiceTerms || 'Net 30 Days',
+        address: tenantSettings.address || '',
+        website: tenantSettings.website || '',
+      });
+    }
+  }, [tenantSettings, user]);
 
   // Team Members Dynamic State
   const [team, setTeam] = useState<TeamMember[]>([]);
@@ -81,7 +97,7 @@ export const Settings: React.FC = () => {
     weeklyReport: false,
   });
 
-  const isAdmin = user.role === 'Company Admin' || (user.role as string) === 'Super Admin';
+  const isAdmin = user?.role === 'Company Admin' || (user?.role as string) === 'Super Admin';
 
   // Workspace Seat Statistics State
   const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
@@ -269,7 +285,7 @@ export const Settings: React.FC = () => {
             Settings & Tenant Governance
           </h1>
           <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
-            Tenant: {user.tenantId}
+            Tenant: {user?.tenantId || ''}
           </span>
         </div>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -659,8 +675,8 @@ export const Settings: React.FC = () => {
                   {team.map((member) => {
                     const memberId = member.id || (member as any)._id;
                     const isCurrentUser =
-                      member.email.toLowerCase() === user.email.toLowerCase() ||
-                      memberId === user.id;
+                      Boolean(user?.email && member.email.toLowerCase() === user.email.toLowerCase()) ||
+                      Boolean(user?.id && memberId === user.id);
 
                     return (
                       <tr

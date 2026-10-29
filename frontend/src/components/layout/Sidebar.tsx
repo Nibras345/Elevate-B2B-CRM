@@ -196,11 +196,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && (
                 <div className="flex flex-col truncate">
                   <span className="font-bold text-slate-900 dark:text-white tracking-tight truncate flex items-center gap-1.5 text-base">
-                    {tenantSettings?.companyName || user.companyName}
+                    {tenantSettings?.companyName || user?.companyName || 'CRM Workspace'}
                   </span>
                   <span className="text-[10px] uppercase font-semibold text-brand-600 dark:text-brand-400 tracking-wider flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Tenant: {user.tenantId}
+                    Tenant: {user?.tenantId || ''}
                   </span>
                 </div>
               )}

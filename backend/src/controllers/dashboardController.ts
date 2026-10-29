@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { Invoice } from '../models/Invoice';
 import { Lead } from '../models/Lead';
 import { Client } from '../models/Client';
+import { Tenant } from '../models/Tenant';
 import { AuthRequest } from '../types';
 import { getTenantContext } from '../utils/tenantHelper';
 
@@ -94,7 +95,132 @@ export const getDashboardStats = async (
       ? Number(((dealsClosedCount / totalLeadsCount) * 100).toFixed(1))
       : 0;
 
-    // Formatted Top Metrics and KPI Cards
+    // Real Period-over-Period Calculations
+    const now = new Date();
+
+    // 1. Month boundaries for current & previous period
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    // Revenue current month vs previous month
+    const [currMonthPaidAgg, prevMonthPaidAgg] = await Promise.all([
+      Invoice.aggregate([
+        {
+          $match: {
+            tenantId: tenantObjectId,
+            status: 'Paid',
+            $expr: {
+              $gte: [{ $ifNull: ['$issueDate', '$createdAt'] }, startOfCurrentMonth],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$grandTotal', { $ifNull: ['$total', 0] }] } },
+          },
+        },
+      ]),
+      Invoice.aggregate([
+        {
+          $match: {
+            tenantId: tenantObjectId,
+            status: 'Paid',
+            $expr: {
+              $and: [
+                { $gte: [{ $ifNull: ['$issueDate', '$createdAt'] }, startOfPrevMonth] },
+                { $lte: [{ $ifNull: ['$issueDate', '$createdAt'] }, endOfPrevMonth] },
+              ],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$grandTotal', { $ifNull: ['$total', 0] }] } },
+          },
+        },
+      ]),
+    ]);
+
+    const currMonthRev = currMonthPaidAgg.length > 0 ? (currMonthPaidAgg[0].total || 0) : 0;
+    const prevMonthRev = prevMonthPaidAgg.length > 0 ? (prevMonthPaidAgg[0].total || 0) : 0;
+
+    let revChangePercent = 0;
+    if (prevMonthRev > 0) {
+      revChangePercent = Number((((currMonthRev - prevMonthRev) / prevMonthRev) * 100).toFixed(1));
+    } else if (currMonthRev > 0) {
+      revChangePercent = 100;
+    }
+
+    // Active Leads current month vs previous month
+    const [currMonthActiveLeads, prevMonthActiveLeads] = await Promise.all([
+      Lead.countDocuments({
+        tenantId: tenantObjectId,
+        stage: { $nin: ['Won / Closed', 'Won'] },
+        createdAt: { $gte: startOfCurrentMonth },
+      }),
+      Lead.countDocuments({
+        tenantId: tenantObjectId,
+        stage: { $nin: ['Won / Closed', 'Won'] },
+        createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth },
+      }),
+    ]);
+
+    let leadsChangePercent = 0;
+    if (prevMonthActiveLeads > 0) {
+      leadsChangePercent = Number((((currMonthActiveLeads - prevMonthActiveLeads) / prevMonthActiveLeads) * 100).toFixed(1));
+    } else if (currMonthActiveLeads > 0) {
+      leadsChangePercent = 100;
+    }
+
+    // Deals Closed current quarter vs previous quarter
+    const currentQuarterIndex = Math.floor(now.getMonth() / 3);
+    const startOfCurrentQuarter = new Date(now.getFullYear(), currentQuarterIndex * 3, 1);
+    const startOfPrevQuarter = new Date(now.getFullYear(), (currentQuarterIndex - 1) * 3, 1);
+    const endOfPrevQuarter = new Date(now.getFullYear(), currentQuarterIndex * 3, 0, 23, 59, 59, 999);
+
+    const [currQuarterDeals, prevQuarterDeals] = await Promise.all([
+      Lead.countDocuments({
+        tenantId: tenantObjectId,
+        stage: { $in: ['Won / Closed', 'Won'] },
+        $expr: {
+          $gte: [{ $ifNull: ['$updatedAt', '$createdAt'] }, startOfCurrentQuarter],
+        },
+      }),
+      Lead.countDocuments({
+        tenantId: tenantObjectId,
+        stage: { $in: ['Won / Closed', 'Won'] },
+        $expr: {
+          $and: [
+            { $gte: [{ $ifNull: ['$updatedAt', '$createdAt'] }, startOfPrevQuarter] },
+            { $lte: [{ $ifNull: ['$updatedAt', '$createdAt'] }, endOfPrevQuarter] },
+          ],
+        },
+      }),
+    ]);
+
+    let dealsChangePercent = 0;
+    if (prevQuarterDeals > 0) {
+      dealsChangePercent = Number((((currQuarterDeals - prevQuarterDeals) / prevQuarterDeals) * 100).toFixed(1));
+    } else if (currQuarterDeals > 0) {
+      dealsChangePercent = 100;
+    }
+
+    // Conversion rate current month vs previous month
+    const [currTotalLeads, currWonLeads, prevTotalLeads, prevWonLeads] = await Promise.all([
+      Lead.countDocuments({ tenantId: tenantObjectId, createdAt: { $gte: startOfCurrentMonth } }),
+      Lead.countDocuments({ tenantId: tenantObjectId, stage: { $in: ['Won / Closed', 'Won'] }, createdAt: { $gte: startOfCurrentMonth } }),
+      Lead.countDocuments({ tenantId: tenantObjectId, createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth } }),
+      Lead.countDocuments({ tenantId: tenantObjectId, stage: { $in: ['Won / Closed', 'Won'] }, createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth } }),
+    ]);
+
+    const currConv = currTotalLeads > 0 ? (currWonLeads / currTotalLeads) * 100 : conversionRate;
+    const prevConv = prevTotalLeads > 0 ? (prevWonLeads / prevTotalLeads) * 100 : 0;
+    const convDiff = Number((currConv - prevConv).toFixed(1));
+
+    // Formatted Top Metrics and Dynamic KPI Cards
     const topMetrics = {
       totalRevenue,
       totalRevenueFormatted: formatUSD(totalRevenue),
@@ -111,9 +237,9 @@ export const getDashboardStats = async (
         title: 'Total Revenue',
         value: formatUSD(totalRevenue),
         rawValue: totalRevenue,
-        change: '+14.2%',
+        change: `${revChangePercent >= 0 ? '+' : ''}${revChangePercent}%`,
         period: 'vs last month',
-        isPositive: true,
+        isPositive: revChangePercent >= 0,
         color: 'indigo',
       },
       {
@@ -121,9 +247,9 @@ export const getDashboardStats = async (
         title: 'Active Leads',
         value: activeLeadsCount.toLocaleString(),
         rawValue: activeLeadsCount,
-        change: '+8.4%',
+        change: `${leadsChangePercent >= 0 ? '+' : ''}${leadsChangePercent}%`,
         period: 'vs last month',
-        isPositive: true,
+        isPositive: leadsChangePercent >= 0,
         color: 'emerald',
       },
       {
@@ -131,9 +257,9 @@ export const getDashboardStats = async (
         title: 'Deals Closed',
         value: dealsClosedCount.toLocaleString(),
         rawValue: dealsClosedCount,
-        change: '+22.8%',
+        change: `${dealsChangePercent >= 0 ? '+' : ''}${dealsChangePercent}%`,
         period: 'vs last quarter',
-        isPositive: true,
+        isPositive: dealsChangePercent >= 0,
         color: 'amber',
       },
       {
@@ -141,9 +267,9 @@ export const getDashboardStats = async (
         title: 'Conversion Rate',
         value: `${conversionRate}%`,
         rawValue: conversionRate,
-        change: '+3.1%',
-        period: 'vs benchmark',
-        isPositive: true,
+        change: `${convDiff >= 0 ? '+' : ''}${convDiff}%`,
+        period: 'vs last month',
+        isPositive: convDiff >= 0,
         color: 'purple',
       },
     ];
@@ -182,7 +308,6 @@ export const getDashboardStats = async (
 
     // Build standard 12-month rolling timeline
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const now = new Date();
     const timelineMonths: { year: number; month: number; name: string }[] = [];
 
     for (let i = 11; i >= 0; i--) {
@@ -194,15 +319,18 @@ export const getDashboardStats = async (
       });
     }
 
-    // Default target quota baseline progression
-    const defaultQuotas = [25000, 30000, 35000, 35000, 40000, 42000, 48000, 48000, 52000, 55000, 58000, 62000];
+    // Dynamic target quota: fetch from TenantSettings / Tenant model or default strictly to zeroes
+    const tenantDoc = await Tenant.findById(tenantObjectId).lean();
+    const configuredQuotas = (tenantDoc as any)?.monthlyTargets || (tenantDoc as any)?.targetQuotas || [];
 
     const monthlyRevenue = timelineMonths.map((m, index) => {
       const found = monthlyPaidInvoices.find(
         (agg) => agg._id.year === m.year && agg._id.month === m.month
       );
       const revenue = found ? Math.round(found.totalAmount) : 0;
-      const target = defaultQuotas[index % defaultQuotas.length];
+      const target = Array.isArray(configuredQuotas) && configuredQuotas[index] !== undefined
+        ? Number(configuredQuotas[index]) || 0
+        : 0;
 
       return {
         month: m.name,
@@ -327,9 +455,7 @@ export const getDashboardStats = async (
       return {
         id: `act-lead-${lead._id}`,
         user: lead.assignedTo?.name || lead.contactName || 'Sales Agent',
-        avatar:
-          lead.assignedTo?.avatar ||
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80',
+        avatar: lead.assignedTo?.avatar || '',
         action: isWon ? 'closed deal for' : (lead.lastActivity || `advanced opportunity in ${lead.stage}`),
         target: lead.companyName || lead.company || lead.contactName || 'Enterprise Lead',
         value: formatUSD(lead.estimatedValue || 0),
@@ -345,8 +471,7 @@ export const getDashboardStats = async (
       return {
         id: `act-inv-${inv._id}`,
         user: inv.clientName || 'Finance Dept',
-        avatar:
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&auto=format&fit=crop&q=80',
+        avatar: inv.avatar || '',
         action: isPaid
           ? `received payment for ${inv.invoiceNumber || 'Invoice'}`
           : `generated invoice ${inv.invoiceNumber || 'Invoice'}`,
@@ -363,8 +488,7 @@ export const getDashboardStats = async (
       return {
         id: `act-client-${client._id}`,
         user: client.contactName || 'Onboarding Team',
-        avatar:
-          'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&auto=format&fit=crop&q=80',
+        avatar: client.avatar || '',
         action: client.lastContacted || 'onboarded new enterprise client',
         target: client.companyName || client.company || client.contactName || 'Valued Client',
         value: formatUSD(client.lifetimeValue || 0),

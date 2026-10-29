@@ -37,7 +37,7 @@ const TenantSchema: Schema<ITenant> = new Schema(
     },
     logoUrl: {
       type: String,
-      default: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80',
+      default: '',
     },
     currency: {
       type: String,

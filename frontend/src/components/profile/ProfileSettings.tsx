@@ -29,15 +29,15 @@ export const ProfileSettings: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form input state
-  const [fullName, setFullName] = useState<string>(user.fullName || user.name || '');
-  const [email, setEmail] = useState<string>(user.email || '');
-  const [phone, setPhone] = useState<string>(user.phone || '');
-  const [department, setDepartment] = useState<string>(user.department || '');
+  const [fullName, setFullName] = useState<string>(user?.fullName || user?.name || '');
+  const [email, setEmail] = useState<string>(user?.email || '');
+  const [phone, setPhone] = useState<string>(user?.phone || '');
+  const [department, setDepartment] = useState<string>(user?.department || '');
 
   // Profile picture states
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>(
-    user.profilePicture || user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'
+    user?.profilePicture || user?.avatar || ''
   );
 
   // UI status states
@@ -168,14 +168,13 @@ export const ProfileSettings: React.FC = () => {
 
   // Sync state whenever authenticated user data updates externally
   useEffect(() => {
+    if (!user) return;
     setFullName(user.fullName || user.name || '');
     setEmail(user.email || '');
     setPhone(user.phone || '');
     setDepartment(user.department || '');
     if (!selectedImageFile) {
-      setImagePreview(
-        user.profilePicture || user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'
-      );
+      setImagePreview(user.profilePicture || user.avatar || '');
     }
   }, [user]);
 
@@ -231,17 +230,17 @@ export const ProfileSettings: React.FC = () => {
       URL.revokeObjectURL(imagePreview);
     }
     setSelectedImageFile(null);
-    setImagePreview(user.profilePicture || user.avatar || '');
+    setImagePreview(user?.profilePicture || user?.avatar || '');
     if (fileInputRef.current) fileInputRef.current.value = '';
     notify('Image selection cleared', 'info');
   };
 
   // Reset form inputs back to current user state
   const handleReset = () => {
-    setFullName(user.fullName || user.name || '');
-    setEmail(user.email || '');
-    setPhone(user.phone || '');
-    setDepartment(user.department || '');
+    setFullName(user?.fullName || user?.name || '');
+    setEmail(user?.email || '');
+    setPhone(user?.phone || '');
+    setDepartment(user?.department || '');
     handleRevertImage();
     setStatusMessage({ type: null, text: '' });
   };
@@ -337,10 +336,10 @@ export const ProfileSettings: React.FC = () => {
   };
 
   const hasUnsavedChanges =
-    fullName !== (user.fullName || user.name || '') ||
-    email !== user.email ||
-    phone !== (user.phone || '') ||
-    department !== (user.department || '') ||
+    fullName !== (user?.fullName || user?.name || '') ||
+    email !== (user?.email || '') ||
+    phone !== (user?.phone || '') ||
+    department !== (user?.department || '') ||
     selectedImageFile !== null;
 
   return (
@@ -359,11 +358,17 @@ export const ProfileSettings: React.FC = () => {
         {/* Circular Avatar with Camera Icon Overlay */}
         <div className="mt-6 relative group">
           <div className="relative w-32 h-32 sm:w-36 sm:h-36 mx-auto">
-            <img
-              src={imagePreview}
-              alt={fullName || user.name}
-              className="w-full h-full rounded-full object-cover border-4 border-white dark:border-slate-800 shadow-xl ring-4 ring-brand-500/20 group-hover:ring-brand-500/50 transition-all duration-300"
-            />
+            {imagePreview ? (
+              <img
+                src={imagePreview}
+                alt={fullName || user?.name || 'Profile'}
+                className="w-full h-full rounded-full object-cover border-4 border-white dark:border-slate-800 shadow-xl ring-4 ring-brand-500/20 group-hover:ring-brand-500/50 transition-all duration-300"
+              />
+            ) : (
+              <div className="w-full h-full rounded-full border-4 border-white dark:border-slate-800 shadow-xl ring-4 ring-brand-500/20 flex items-center justify-center bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-3xl">
+                {(fullName || user?.name || 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
 
             {/* Quick hover indicator */}
             <button
@@ -419,16 +424,16 @@ export const ProfileSettings: React.FC = () => {
 
         {/* User identification summary */}
         <h3 className="mt-4 text-base font-bold text-slate-900 dark:text-white">
-          {fullName || user.name}
+          {fullName || user?.name || 'User Profile'}
         </h3>
-        <p className="text-xs text-slate-400 truncate max-w-[220px]">{email || user.email}</p>
+        <p className="text-xs text-slate-400 truncate max-w-[220px]">{email || user?.email || ''}</p>
 
         <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
           <Badge variant="primary" size="sm">
-            {user.role}
+            {user?.role || 'Member'}
           </Badge>
           <Badge variant="neutral" size="sm">
-            Tenant: {user.tenantId}
+            Tenant: {user?.tenantId || ''}
           </Badge>
         </div>
 
@@ -638,9 +643,9 @@ export const ProfileSettings: React.FC = () => {
                   </span>
                   <div className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200">
                     <Building className="w-3.5 h-3.5 text-brand-500" />
-                    <span>{user.companyName}</span>
+                    <span>{user?.companyName || 'Enterprise Workspace'}</span>
                     <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700">
-                      {user.tenantId}
+                      {user?.tenantId || ''}
                     </span>
                   </div>
                 </div>
@@ -650,7 +655,7 @@ export const ProfileSettings: React.FC = () => {
                     Assigned Role:
                   </span>
                   <span className="font-semibold text-brand-600 dark:text-brand-400">
-                    {user.role} (Isolated Multi-Tenant Access)
+                    {user?.role || 'Member'} (Isolated Multi-Tenant Access)
                   </span>
                 </div>
               </div>
