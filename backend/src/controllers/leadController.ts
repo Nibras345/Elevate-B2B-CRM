@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { Lead, LeadStage, LeadPriority } from '../models/Lead';
 import { Client } from '../models/Client';
+import { User } from '../models/User';
 import { AuthRequest } from '../types';
 import { getTenantContext } from '../utils/tenantHelper';
 
@@ -28,7 +29,7 @@ const formatLeadResponse = (lead: any) => ({
   stage: lead.stage,
   tags: lead.tags || [],
   assignedTo: lead.assignedTo || {
-    name: 'Alex Morgan',
+    name: 'Sales Agent',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     role: 'Sales Agent',
   },
@@ -116,6 +117,32 @@ export const createLead = async (
       normalizedStage = stage as LeadStage;
     }
 
+    // Resolve assigned sales rep dynamically from User collection if user ID or object is passed
+    let resolvedAssignedTo = {
+      name: req.user?.fullName || req.user?.name || 'Sales Agent',
+      avatar: req.user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      role: req.user?.role || 'Sales Agent',
+    };
+
+    if (assignedTo) {
+      if (typeof assignedTo === 'string' && mongoose.isValidObjectId(assignedTo)) {
+        const assignedUser = await User.findById(assignedTo).select('_id name role profilePicture avatar');
+        if (assignedUser) {
+          resolvedAssignedTo = {
+            name: assignedUser.name,
+            avatar: assignedUser.profilePicture || assignedUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            role: assignedUser.role || 'Sales Agent',
+          };
+        }
+      } else if (typeof assignedTo === 'object' && assignedTo.name) {
+        resolvedAssignedTo = {
+          name: assignedTo.name,
+          avatar: assignedTo.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          role: assignedTo.role || 'Sales Agent',
+        };
+      }
+    }
+
     const newLead = await Lead.create({
       tenantId: tenantObjectId,
       tenantCode,
@@ -128,11 +155,7 @@ export const createLead = async (
       notes: notes || '',
       stage: normalizedStage,
       tags: Array.isArray(tags) ? tags : typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()).filter(Boolean) : ['Enterprise'],
-      assignedTo: assignedTo || {
-        name: req.user?.fullName || req.user?.name || 'Sales Agent',
-        avatar: req.user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        role: req.user?.role || 'Sales Agent',
-      },
+      assignedTo: resolvedAssignedTo,
       lastActivity: 'Lead created in CRM pipeline',
       expectedClose: expectedClose || '',
     });

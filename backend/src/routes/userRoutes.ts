@@ -6,8 +6,9 @@ import {
   forgotPassword,
   verifyOtp,
   resetPassword,
+  getUsers,
 } from '../controllers/userController';
-import { protect } from '../middleware/authMiddleware';
+import { protect, tenantGuard } from '../middleware/authMiddleware';
 import { uploadProfilePicture } from '../middleware/uploadMiddleware';
 
 const router: Router = Router();
@@ -32,6 +33,13 @@ router.post('/verify-otp', verifyOtp);
  * @access  Public
  */
 router.post('/reset-password', resetPassword);
+
+/**
+ * @route   GET /api/users
+ * @desc    Fetch team members for the current workspace dropdown
+ * @access  Private (JWT Protected)
+ */
+router.get('/', protect, tenantGuard, getUsers);
 
 /**
  * @route   GET /api/users/profile

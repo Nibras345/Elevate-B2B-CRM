@@ -39,6 +39,9 @@ export const LeadsPipeline: React.FC = () => {
   const [ownerFilter, setOwnerFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
 
+  // Dynamic team members for Assigned Sales Rep dropdown
+  const [teamMembers, setTeamMembers] = useState<{ _id: string; name: string; role: string }[]>([]);
+
   // Selected lead for View/Edit Drawer
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -53,13 +56,47 @@ export const LeadsPipeline: React.FC = () => {
     value: '',
     priority: 'High' as Priority,
     stage: 'New Lead' as PipelineStage,
-    assignedToName: '',
+    assignedTo: '',
     tags: 'Enterprise, Q1',
     notes: '',
   });
 
   const { notify } = useNotification();
   const { user } = useAuth();
+
+  // Fetch dynamic team members strictly isolated to tenant
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      try {
+        const token = localStorage.getItem('nexcrm_jwt_token');
+        const response = await axios.get('/api/users', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const members =
+          response.data?.users ||
+          response.data?.team ||
+          (Array.isArray(response.data) ? response.data : []);
+
+        setTeamMembers(members);
+
+        if (members.length > 0) {
+          setNewLeadForm((prev) => {
+            if (!prev.assignedTo) {
+              return { ...prev, assignedTo: members[0]._id };
+            }
+            return prev;
+          });
+        }
+      } catch (err: any) {
+        console.error('[Fetch Team Members Error]:', err);
+      }
+    };
+
+    fetchTeamMembers();
+  }, [user?.tenantId, isAddModalOpen]);
 
   // Route 1: GET /api/leads - Strict tenant isolation
   const fetchLeads = async () => {
@@ -281,6 +318,7 @@ export const LeadsPipeline: React.FC = () => {
           estimatedValue: Number(newLeadForm.value) || 0,
           priority: newLeadForm.priority,
           stage: newLeadForm.stage,
+          assignedTo: newLeadForm.assignedTo,
           notes: newLeadForm.notes,
           tags: newLeadForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
         },
@@ -304,7 +342,7 @@ export const LeadsPipeline: React.FC = () => {
           value: '',
           priority: 'High',
           stage: 'New Lead',
-          assignedToName: '',
+          assignedTo: teamMembers.length > 0 ? teamMembers[0]._id : '',
           tags: 'Enterprise, Q1',
           notes: '',
         });
@@ -393,9 +431,11 @@ export const LeadsPipeline: React.FC = () => {
               className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-500 cursor-pointer"
             >
               <option value="All">All Owners</option>
-              <option value="Alex Morgan">Alex Morgan</option>
-              <option value="David Chen">David Chen</option>
-              <option value="Emma Watson">Emma Watson</option>
+              {teamMembers.map((member) => (
+                <option key={member._id} value={member.name}>
+                  {member.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -846,13 +886,19 @@ export const LeadsPipeline: React.FC = () => {
                 Assigned Sales Rep
               </label>
               <select
-                value={newLeadForm.assignedToName}
-                onChange={(e) => setNewLeadForm({ ...newLeadForm, assignedToName: e.target.value })}
+                value={newLeadForm.assignedTo}
+                onChange={(e) => setNewLeadForm({ ...newLeadForm, assignedTo: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
               >
-                <option value="Alex Morgan">Alex Morgan (Admin)</option>
-                <option value="David Chen">David Chen (Sales Agent)</option>
-                <option value="Emma Watson">Emma Watson (Sales Agent)</option>
+                {teamMembers.length === 0 ? (
+                  <option value="" disabled>No team members found</option>
+                ) : (
+                  teamMembers.map((member) => (
+                    <option key={member._id} value={member._id}>
+                      {`${member.name} (${member.role})`}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>

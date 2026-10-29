@@ -494,4 +494,49 @@ export const resetPassword = async (
   }
 };
 
+/**
+ * @route   GET /api/users
+ * @desc    Fetch team members for the current workspace dropdown
+ * @access  Private (JWT Protected)
+ */
+export const getUsers = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const currentTenantId = req.user?.tenantId;
+
+    if (!currentTenantId) {
+      res.status(400).json({
+        success: false,
+        message: 'Tenant context is missing from authenticated session.',
+      });
+      return;
+    }
+
+    // Fetch users strictly isolated to current workspace: tenantId === req.user.tenantId
+    const users = await User.find({
+      $or: [
+        { tenantId: currentTenantId },
+        { tenantIds: currentTenantId },
+        { 'workspaces.tenantId': currentTenantId },
+      ],
+      isActive: { $ne: false },
+    })
+      .select('_id name role')
+      .sort({ name: 1 })
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      users,
+      team: users,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 
