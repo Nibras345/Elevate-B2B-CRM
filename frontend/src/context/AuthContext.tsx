@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import axios from 'axios';
 import { UserProfile, TenantSettings, Role } from '../types';
 
 export interface RegisterParams {
   name: string;
   email: string;
   password?: string;
-  companyName: string;
+  companyName?: string | null;
   role?: Role;
 }
 
@@ -62,14 +63,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       try {
-        const res = await fetch('/api/auth/me', {
+        const res = await axios.get('/api/auth/me', {
           headers: {
             Authorization: `Bearer ${savedToken}`,
           },
         });
-        const data = await res.json();
+        const data = res.data;
 
-        if (res.ok && data.success && data.user) {
+        if (res.status === 200 && data.success && data.user) {
           const u = data.user;
           const userProfile: UserProfile = {
             id: u._id || u.id,
@@ -81,7 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             phone: u.phone || '',
             role: u.role,
             companyName: u.companyName || (data.tenant ? data.tenant.name : ''),
-            tenantId: u.tenantId,
+            tenantId: u.tenantId || '',
             department: u.department || '',
             joinedDate: 'Active Member',
           };
@@ -100,6 +101,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               address: data.tenant.address || '',
               website: data.tenant.website || '',
             });
+          } else {
+            setTenantSettings(null);
           }
           setIsAuthenticated(true);
         } else {
@@ -141,17 +144,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email?: string, password?: string, _role?: Role): Promise<AuthResponse> => {
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const res = await axios.post('/api/auth/login', { email, password });
+      const data = res.data;
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         return {
           success: false,
           message: data.message || 'Login failed. Please check your credentials.',
@@ -175,22 +171,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         phone: u.phone || '',
         role: u.role,
         companyName: u.companyName || t?.name || '',
-        tenantId: u.tenantId,
+        tenantId: u.tenantId || '',
         department: u.department || '',
         joinedDate: 'Active Member',
       };
 
-      const tenantInfo: TenantSettings = {
-        companyName: t?.name || userProfile.companyName,
-        tenantId: t?.tenantId || userProfile.tenantId,
-        logoUrl: t?.logoUrl || '',
-        currency: t?.currency || 'USD ($)',
-        fiscalYear: t?.fiscalYear || 'Jan - Dec',
-        defaultTaxRate: t?.defaultTaxRate ?? 10,
-        invoiceTerms: t?.invoiceTerms || 'Net 30 Days',
-        address: t?.address || '',
-        website: t?.website || '',
-      };
+      const tenantInfo: TenantSettings | null = t
+        ? {
+            companyName: t.name || userProfile.companyName,
+            tenantId: t.tenantId || userProfile.tenantId,
+            logoUrl: t.logoUrl || '',
+            currency: t.currency || 'USD ($)',
+            fiscalYear: t.fiscalYear || 'Jan - Dec',
+            defaultTaxRate: t.defaultTaxRate ?? 10,
+            invoiceTerms: t.invoiceTerms || 'Net 30 Days',
+            address: t.address || '',
+            website: t.website || '',
+          }
+        : null;
 
       setUser(userProfile);
       setTenantSettings(tenantInfo);
@@ -203,7 +201,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (err: any) {
       return {
         success: false,
-        message: err.message || 'Network error connecting to backend API.',
+        message: err.response?.data?.message || err.message || 'Network error connecting to backend API.',
       };
     }
   };
@@ -216,23 +214,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     role = 'Company Admin',
   }: RegisterParams): Promise<AuthResponse> => {
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          companyName,
-          role,
-        }),
-      });
+      const payload: Record<string, any> = {
+        name,
+        email,
+        password,
+        role,
+      };
 
-      const data = await res.json();
+      // Strict role-based payload: companyName ONLY for Company Admin
+      if (role === 'Company Admin') {
+        payload.companyName = companyName ? companyName.trim() : '';
+      } else {
+        payload.companyName = null;
+      }
 
-      if (!res.ok || !data.success) {
+      const response = await axios.post('/api/auth/register', payload);
+      const data = response.data;
+
+      if (!data.success) {
         return {
           success: false,
           message: data.message || 'Registration failed.',
@@ -252,23 +251,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: u.email,
         avatar: u.avatar || '',
         role: u.role,
-        companyName: u.companyName || t?.name || companyName,
-        tenantId: u.tenantId,
+        companyName: u.companyName || t?.name || (role === 'Company Admin' ? companyName || '' : ''),
+        tenantId: u.tenantId || '',
         department: u.department || '',
         joinedDate: 'Just now',
       };
 
-      const tenantInfo: TenantSettings = {
-        companyName: t?.name || companyName,
-        tenantId: t?.tenantId || u.tenantId,
-        logoUrl: t?.logoUrl || '',
-        currency: t?.currency || 'USD ($)',
-        fiscalYear: t?.fiscalYear || 'Jan - Dec',
-        defaultTaxRate: t?.defaultTaxRate ?? 10,
-        invoiceTerms: t?.invoiceTerms || 'Net 30 Days',
-        address: t?.address || '',
-        website: t?.website || '',
-      };
+      const tenantInfo: TenantSettings | null = t
+        ? {
+            companyName: t.name || (role === 'Company Admin' ? companyName || '' : ''),
+            tenantId: t.tenantId || u.tenantId || '',
+            logoUrl: t.logoUrl || '',
+            currency: t.currency || 'USD ($)',
+            fiscalYear: t.fiscalYear || 'Jan - Dec',
+            defaultTaxRate: t.defaultTaxRate ?? 10,
+            invoiceTerms: t.invoiceTerms || 'Net 30 Days',
+            address: t.address || '',
+            website: t.website || '',
+          }
+        : null;
 
       setUser(userProfile);
       setTenantSettings(tenantInfo);
@@ -276,19 +277,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       return {
         success: true,
-        message: data.message || 'Workspace registered successfully.',
+        message: data.message || (role === 'Company Admin' ? 'Workspace registered successfully.' : 'Employee account created successfully.'),
       };
     } catch (err: any) {
       return {
         success: false,
-        message: err.message || 'Network error connecting to backend API.',
+        message: err.response?.data?.message || err.message || 'Network error connecting to backend API.',
       };
     }
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await axios.post('/api/auth/logout');
     } catch {
       // Ignore network errors on logout
     }

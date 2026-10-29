@@ -63,7 +63,7 @@ const UserSchema: Schema<IUser> = new Schema(
     },
     tenantId: {
       type: String,
-      required: [true, 'Tenant ID is required for multi-tenant isolation'],
+      default: '',
       index: true,
     },
     tenant: {
@@ -114,7 +114,7 @@ const UserSchema: Schema<IUser> = new Schema(
     ],
     avatar: {
       type: String,
-      default: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      default: '',
     },
     profilePicture: {
       type: String,

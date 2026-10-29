@@ -4,6 +4,8 @@ import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { Modal } from '../common/Modal';
 import { Search, ArrowRight, KanbanSquare, Users, Receipt, Settings, LucideIcon } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { PendingInviteScreen } from '../../pages/PendingInviteScreen';
 
 interface QuickLink {
   title: string;
@@ -13,6 +15,7 @@ interface QuickLink {
 }
 
 export const ShellLayout: React.FC = () => {
+  const { user } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -30,6 +33,12 @@ export const ShellLayout: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Waiting Room Guard: If user has no assigned tenantId, skip rendering full CRM layout.
+  // This halts all child useEffect API calls that would trigger 400 Bad Request errors.
+  if (user && !user.tenantId) {
+    return <PendingInviteScreen />;
+  }
 
   const quickLinks: QuickLink[] = [
     { title: 'Pipeline Kanban Board', category: 'Pages', path: '/leads', icon: KanbanSquare },

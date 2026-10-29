@@ -27,35 +27,58 @@ export const Register: React.FC = () => {
   const { notify } = useNotification();
   const navigate = useNavigate();
 
-  // Calculated preview of Tenant ID
+  // Calculated preview of Tenant ID for Company Admin
   const tenantPreview = companyName.trim()
     ? `TNT-${companyName.trim().substring(0, 4).toUpperCase()}-9402`
     : 'TNT-CORP-9402';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!companyName.trim()) {
+
+    // Strict validation: companyName is required ONLY for Company Admin
+    if (role === 'Company Admin' && !companyName.trim()) {
       notify('Please enter your Company Name to provision your Tenant ID', 'warning');
       return;
     }
 
     setIsLoading(true);
 
-    const res = await register({
-      name,
-      email,
-      password,
-      companyName,
-      role,
-    });
+    try {
+      // Build Axios POST payload: role is explicitly included;
+      // If role === 'Employee', companyName is sent as null
+      const payload: {
+        name: string;
+        email: string;
+        password: string;
+        role: Role;
+        companyName?: string | null;
+      } = {
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        role,
+        ...(role === 'Company Admin' ? { companyName: companyName.trim() } : { companyName: null }),
+      };
 
-    if (res.success) {
-      notify(res.message || `Tenant workspace provisioned for ${companyName}! Welcome aboard.`, 'success');
-      navigate('/dashboard');
-    } else {
-      notify(res.message || 'Registration failed. Please check your details.', 'error');
+      const res = await register(payload);
+
+      if (res.success) {
+        notify(
+          res.message ||
+            (role === 'Company Admin'
+              ? `Tenant workspace provisioned for ${companyName}! Welcome aboard.`
+              : 'Account created successfully! Welcome to the CRM.'),
+          'success'
+        );
+        navigate('/dashboard');
+      } else {
+        notify(res.message || 'Registration failed. Please check your details.', 'error');
+      }
+    } catch (err: any) {
+      notify(err.response?.data?.message || err.message || 'Registration failed.', 'error');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -83,30 +106,44 @@ export const Register: React.FC = () => {
         <div className="relative z-10 max-w-lg space-y-6 my-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Zero-Setup Tenant Provisioning</span>
+            <span>{role === 'Company Admin' ? 'Zero-Setup Tenant Provisioning' : 'Role-Based Workspace Access'}</span>
           </div>
 
           <h1 className="text-4xl font-extrabold tracking-tight leading-snug">
-            Your Dedicated CRM Tenant in under 60 seconds.
+            {role === 'Company Admin'
+              ? 'Your Dedicated CRM Tenant in under 60 seconds.'
+              : 'Collaborate with your sales team in real time.'}
           </h1>
 
           <p className="text-slate-300 text-sm leading-relaxed">
-            Every organization on NexSphere receives an isolated virtual data partition, custom branding options,
-            configurable deal pipeline stages, and end-to-end PDF billing automation.
+            {role === 'Company Admin'
+              ? 'Every organization on NexSphere receives an isolated virtual data partition, custom branding options, configurable deal pipeline stages, and end-to-end PDF billing automation.'
+              : 'Join your organization’s CRM workspace to manage leads, track deals through pipeline stages, create invoices, and collaborate with your team.'}
           </p>
 
-          {/* Tenant preview card */}
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-2">
-            <span className="text-xs text-brand-300 font-semibold uppercase tracking-wider block">
-              Live Tenant ID Generator
-            </span>
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-mono font-bold text-white">{tenantPreview}</span>
-              <span className="text-xs bg-emerald-500/20 text-emerald-300 font-medium px-2 py-0.5 rounded-md">
-                Isolated Partition
+          {/* Conditional Left Sidebar preview */}
+          {role === 'Company Admin' ? (
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-2">
+              <span className="text-xs text-brand-300 font-semibold uppercase tracking-wider block">
+                Live Tenant ID Generator
               </span>
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-mono font-bold text-white">{tenantPreview}</span>
+                <span className="text-xs bg-emerald-500/20 text-emerald-300 font-medium px-2 py-0.5 rounded-md">
+                  Isolated Partition
+                </span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-2">
+              <span className="text-xs text-brand-300 font-semibold uppercase tracking-wider block">
+                Employee Seat Assignment
+              </span>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                As an Employee, you do not need to create a new company. Your workspace access is linked to your email address or an invite from your Company Admin.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="relative z-10 pt-8 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
@@ -123,10 +160,12 @@ export const Register: React.FC = () => {
         <div className="w-full max-w-md space-y-5 my-auto">
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Create SaaS Tenant Account
+              {role === 'Company Admin' ? 'Create SaaS Tenant Account' : 'Create Employee Account'}
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Start your 30-day enterprise trial with zero commitment
+              {role === 'Company Admin'
+                ? 'Start your 30-day enterprise trial with zero commitment'
+                : 'Join your organization’s existing workspace'}
             </p>
           </div>
 
@@ -167,36 +206,10 @@ export const Register: React.FC = () => {
               </div>
             </div>
 
-            {/* Company Name (Tenant ID Foundation) */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Company Name <span className="text-brand-600 font-semibold">(Establishes Tenant ID)</span>
-                </label>
-              </div>
-              <div className="relative">
-                <Building className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g. Apex Horizon Technologies"
-                  className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-500 transition-all"
-                />
-              </div>
-              {companyName && (
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1 font-mono">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Assigned Tenant: {tenantPreview}
-                </p>
-              )}
-            </div>
-
-            {/* Visual Role Selection */}
+            {/* Role Selection */}
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Select Your Role <span className="text-slate-400 text-[11px]">(Simulation Purpose)</span>
+                Select Your Role
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <div
@@ -209,7 +222,7 @@ export const Register: React.FC = () => {
                 >
                   <div className="text-xs font-bold">Company Admin</div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Full billing, team & tenant control
+                    Provisions new company & tenant partition
                   </div>
                 </div>
 
@@ -223,11 +236,39 @@ export const Register: React.FC = () => {
                 >
                   <div className="text-xs font-bold">Employee</div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Pipeline, leads & client access
+                    Pipeline, leads & client workspace access
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Company Name (Tenant ID Foundation) - STRICTLY CONDITIONAL: Shown only for Company Admin */}
+            {role === 'Company Admin' && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Company Name <span className="text-brand-600 font-semibold">(Establishes Tenant ID)</span>
+                  </label>
+                </div>
+                <div className="relative">
+                  <Building className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="e.g. Apex Horizon Technologies"
+                    className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-brand-500 transition-all"
+                  />
+                </div>
+                {companyName && (
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1 font-mono">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Assigned Tenant: {tenantPreview}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Password */}
             <div>
@@ -267,10 +308,10 @@ export const Register: React.FC = () => {
               className="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm shadow-md shadow-brand-500/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer mt-2"
             >
               {isLoading ? (
-                <span>Provisioning Tenant...</span>
+                <span>{role === 'Company Admin' ? 'Provisioning Tenant...' : 'Creating Account...'}</span>
               ) : (
                 <>
-                  <span>Create Workspace & Start CRM</span>
+                  <span>{role === 'Company Admin' ? 'Create Workspace & Start CRM' : 'Create Account & Join CRM'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

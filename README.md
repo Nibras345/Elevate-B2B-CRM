@@ -84,6 +84,14 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Recent Activities Feed**: Aggregates the latest cross-entity records across Leads, Invoices, and Clients, sorted chronologically with category filtering (`all`, `deal`, `invoice`, `lead`, `client`).
 - **Standard USD Currency Formatting**: Formats all monetary values uniformly (e.g., `$1,057,000`).
 
+### 🛡️ 10. Role-Based Registration & Tenant Provisioning
+- **Strict Role Separation**:
+  - **Company Admin**: Requires `companyName` on registration. Automatically provisions a new, isolated `Tenant` record with customized currency, fiscal year, and tax settings, generating a unique `tenantId` (e.g., `TNT-CORP-9402`).
+  - **Employee**: Does not create a new tenant or company partition. Provisions an `Employee` user record ready to be linked to an existing workspace via invitation tokens or administrator assignment.
+- **Conditional UI Rendering**: The registration form dynamically displays the "Company Name" input only when `role === 'Company Admin'`. When toggling to `Employee`, the input is hidden, and `companyName` is sent as `null` in the registration payload.
+- **Mongoose Role & Tenant Flexibility**: `User` model features explicit role enumeration (`'Company Admin'`, `'Employee'`) with flexible `tenantId` definitions, allowing employees to onboard without initial tenant attachment.
+- **Zero-Error Waiting Room (`PendingInviteScreen`)**: When an employee logs in without an assigned `tenantId`, `ShellLayout` conditionally intercepts rendering before any child components mount (`if (user && !user.tenantId) return <PendingInviteScreen />`). This completely prevents initial dashboard, sidebar, and notification API calls from firing with missing tenant context, guiding the employee to await their administrator's invite.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -278,7 +286,7 @@ cd Elevate-B2B-CRM
 ### 🔐 Authentication (`/api/auth`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | Public | Register new company organization & admin account |
+| `POST` | `/api/auth/register` | Public | Role-based registration (`Company Admin` provisions Tenant; `Employee` creates user) |
 | `POST` | `/api/auth/login` | Public | Authenticate user credentials and return JWT |
 | `POST` | `/api/auth/forgot-password` | Public | Request password recovery reset OTP via email |
 | `POST` | `/api/auth/reset-password` | Public | Reset password using verified recovery OTP |
