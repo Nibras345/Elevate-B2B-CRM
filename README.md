@@ -35,7 +35,9 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Nodemailer SMTP Integration**: Automated branded invitation emails with direct activation links.
 
 ### 📈 4. Leads Pipeline & Automated Client Conversion
-- **Visual Kanban Board**: Interactive stages (`New Lead`, `Contacted`, `Proposal Sent`, `Negotiation`, `Won / Closed`) with real-time drag/drop stage transitions.
+- **Visual Kanban Board**: Interactive stages (`New Lead`, `Contacted`, `Proposal Sent`, `Negotiation`, `Won / Closed`) with real-time stage transitions.
+- **Dynamic Assigned Sales Rep**: "Add New Lead Opportunity" modal fetches active workspace members dynamically via `GET /api/users`, eliminating static reps like "Alex Morgan" and linking leads directly to real team members.
+- **Dynamic Owner Filter**: The Kanban board filters opportunities dynamically by team member owners fetched from the database.
 - **Automatic Client Conversion**: Moving a lead to `Won / Closed` automatically creates a corresponding enterprise `Client` record (or updates existing client lifetime value) and archives the won deal.
 - **Deal Value Aggregation**: Tracks estimated values, priority tags, and stage metrics dynamically.
 
@@ -70,6 +72,18 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Dynamic Unread Badge**: Displays a vibrant red indicator badge with the exact unread count on the bell icon whenever `unreadCount > 0`.
 - **One-Click Read Status**: "Mark all as read" button sends a `PUT /api/notifications/mark-all-read` request, instantly switching unread cards from blue to white and clearing the bell badge without page reload.
 
+### 📊 9. Real-Time Executive Dashboard & Performance Analytics
+- **Zero Static Mock Data**: Fully replaced mock metrics with dynamic aggregations fetched via `GET /api/dashboard/stats` and strictly isolated by `req.user.tenantId`.
+- **Top Executive KPI Cards**:
+  - **TOTAL REVENUE**: Real-time sum of `grandTotal` from paid invoices.
+  - **ACTIVE LEADS**: Dynamic count of leads not yet in `Won / Closed` stage.
+  - **DEALS CLOSED**: Count of successfully converted deals in `Won / Closed` stage.
+  - **CONVERSION RATE**: Calculated on the backend as `(Deals Closed / Total Leads) * 100`.
+- **Revenue Performance & Targets (Recharts)**: Interactive responsive `<LineChart>` comparing monthly billed actual revenue against quota targets with custom currency tooltips.
+- **Leads by Pipeline Stage**: Aggregates active deals by stage with deal counts, estimated values, percentage yields, and total pipeline valuation (`totalPipelineValue`).
+- **Recent Activities Feed**: Aggregates the latest cross-entity records across Leads, Invoices, and Clients, sorted chronologically with category filtering (`all`, `deal`, `invoice`, `lead`, `client`).
+- **Standard USD Currency Formatting**: Formats all monetary values uniformly (e.g., `$1,057,000`).
+
 ---
 
 ## 🛠️ Technology Stack
@@ -79,6 +93,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 | **Frontend Framework** | **React 19** | Modern functional components with TypeScript and React Router v7 |
 | **Bundler & Build Tool** | **Vite 8** | High-speed ESM development and production bundle optimization |
 | **Styling & UI** | **Tailwind CSS 3** | Utility-first styling with dark/light mode and custom theme tokens |
+| **Data Visualization** | **Recharts 3** | Interactive responsive line charts, tooltips, and Cartesian analytics |
 | **Iconography** | **Lucide React** | Consistent, modern SVG icon system |
 | **HTTP Client** | **Axios** | Interceptors, Bearer token injection, and error handling |
 | **Backend Runtime** | **Node.js (v20+)** | ES Module runtime executed with TypeScript `tsx` |
@@ -103,12 +118,13 @@ CRM/
 │   │   │   ├── appController.ts    # Sidebar notification metrics & app badges
 │   │   │   ├── authController.ts   # Sign in, registration, forgot password
 │   │   │   ├── clientController.ts # Enterprise clients & dynamic deal/invoice counts
+│   │   │   ├── dashboardController.ts # Executive analytics, KPIs, pipeline & revenue aggregation
 │   │   │   ├── invoiceController.ts# Invoices CRUD, status updates & population
 │   │   │   ├── leadController.ts   # Leads pipeline & auto-conversion workflow
 │   │   │   ├── notificationController.ts # Notification feeds and mark-all-read
 │   │   │   ├── teamController.ts   # Member invites, listing, removal, acceptance
 │   │   │   ├── tenantController.ts # Tenant stats, seat usage, workspace details
-│   │   │   └── userController.ts   # Profile updates, password modification, avatars
+│   │   │   └── userController.ts   # Profile updates, password modification, team members
 │   │   ├── middleware/
 │   │   │   ├── authMiddleware.ts   # JWT verification, tenant isolation guard, RBAC
 │   │   │   └── errorMiddleware.ts  # Centralized error handler
@@ -124,6 +140,7 @@ CRM/
 │   │   │   ├── appRoutes.ts        # /api/app endpoints (sidebar badge metrics)
 │   │   │   ├── authRoutes.ts       # /api/auth endpoints
 │   │   │   ├── clientRoutes.ts     # /api/clients endpoints
+│   │   │   ├── dashboardRoutes.ts  # /api/dashboard endpoints (stats aggregation)
 │   │   │   ├── invoiceRoutes.ts    # /api/invoices endpoints
 │   │   │   ├── leadRoutes.ts       # /api/leads endpoints
 │   │   │   ├── notificationRoutes.ts # /api/notifications endpoints
@@ -291,11 +308,17 @@ cd Elevate-B2B-CRM
 | `GET` | `/api/notifications` | Private | Fetch recent notifications (limit 20, newest first) for current tenant |
 | `PUT` | `/api/notifications/mark-all-read` | Private | Mark all unread notifications as read for current tenant |
 
+### 📊 Executive Dashboard (`/api/dashboard`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/dashboard/stats` | Private | Fetch real-time aggregated executive dashboard metrics (topMetrics, monthlyRevenue, leadsByStage, totalPipelineValue, recentActivities) strictly isolated by tenant |
+
 ### 📈 Leads Pipeline (`/api/leads`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/leads` | Private | Fetch all leads for current tenant |
-| `POST` | `/api/leads` | Private | Create a new lead opportunity |
+| `POST` | `/api/leads` | Private | Create a new lead opportunity with dynamically resolved assigned sales rep |
+| `PUT` | `/api/leads/:id` | Private | Update lead terms or stage (auto-converts to Client upon 'Won / Closed') |
 | `PATCH` | `/api/leads/:id/stage` | Private | Update lead stage (auto-converts to Client upon 'Won / Closed') |
 | `DELETE` | `/api/leads/:id` | Private | Delete a lead with strict tenant verification |
 
@@ -316,9 +339,10 @@ cd Elevate-B2B-CRM
 | `PUT` | `/api/invoices/:id/status` | Private | Update invoice status (`Paid`, `Pending`, `Overdue`) |
 | `DELETE` | `/api/invoices/:id` | Private | Delete invoice with tenant isolation verification |
 
-### 👤 User Profile (`/api/users`)
+### 👤 User Profile & Workspace Members (`/api/users`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
+| `GET` | `/api/users` | Private | Fetch workspace team members (`_id`, `name`, `role`) for dropdowns and filters |
 | `GET` | `/api/users/profile` | Private | Retrieve authenticated user's profile |
 | `PUT` | `/api/users/profile` | Private | Update user details, phone, and department |
 | `PUT` | `/api/users/change-password` | Private | Update account password with old password verification |
