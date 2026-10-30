@@ -294,7 +294,7 @@ cd Elevate-B2B-CRM
 ### 👥 Team & Invitations (`/api/team`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/team` | Private | Retrieve all active members and pending invitations |
+| `GET` | `/api/team` | Private | Retrieve all active members and pending invitations with dynamic `closedRevenue` aggregation |
 | `POST` | `/api/team/invite` | Admin | Send email invitation with seat limit verification |
 | `DELETE` | `/api/team/remove/:id` | Admin | Detach member (`$pull`) or cancel pending invite |
 | `GET` | `/api/team/invitation/:token` | Public | Validate invite token and retrieve tenant metadata |

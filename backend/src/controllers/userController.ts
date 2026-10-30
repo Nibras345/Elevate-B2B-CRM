@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { AuthRequest } from '../types';
 import { sendOtpEmail } from '../utils/emailService';
+import { getTenantContext } from '../utils/tenantHelper';
 
 /**
  * @route   PUT /api/users/profile
@@ -515,18 +517,135 @@ export const getUsers = async (
       return;
     }
 
-    // Fetch users strictly isolated to current workspace: tenantId === req.user.tenantId
-    const users = await User.find({
-      $or: [
-        { tenantId: currentTenantId },
-        { tenantIds: currentTenantId },
-        { 'workspaces.tenantId': currentTenantId },
-      ],
-      isActive: { $ne: false },
-    })
-      .select('_id name role')
-      .sort({ name: 1 })
-      .lean();
+    let tenantObjectId: mongoose.Types.ObjectId | null = null;
+    let tenantCode = currentTenantId;
+
+    try {
+      const context = await getTenantContext(req);
+      tenantObjectId = context.tenantObjectId;
+      tenantCode = context.tenantCode;
+    } catch {
+      if (mongoose.isValidObjectId(currentTenantId)) {
+        tenantObjectId = new mongoose.Types.ObjectId(currentTenantId);
+      }
+    }
+
+    const userMatchConditions: any[] = [
+      { tenantId: currentTenantId },
+      { tenantIds: currentTenantId },
+      { 'workspaces.tenantId': currentTenantId },
+    ];
+
+    if (tenantCode && tenantCode !== currentTenantId) {
+      userMatchConditions.push(
+        { tenantId: tenantCode },
+        { tenantIds: tenantCode },
+        { 'workspaces.tenantId': tenantCode }
+      );
+    }
+
+    if (tenantObjectId) {
+      userMatchConditions.push(
+        { tenant: tenantObjectId },
+        { tenants: tenantObjectId },
+        { 'workspaces.tenant': tenantObjectId }
+      );
+    }
+
+    // Fetch users strictly isolated to current workspace with dynamic closedRevenue aggregation
+    const users = await User.aggregate([
+      {
+        $match: {
+          $or: userMatchConditions,
+          isActive: { $ne: false },
+        },
+      },
+      {
+        $lookup: {
+          from: 'leads',
+          let: {
+            userId: '$_id',
+            userIdStr: { $toString: '$_id' },
+            userName: '$name',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $or: [
+                        ...(tenantObjectId ? [{ $eq: ['$tenantId', tenantObjectId] }] : []),
+                        { $eq: ['$tenantId', currentTenantId] },
+                        { $eq: ['$tenantCode', tenantCode] },
+                        { $eq: ['$tenantCode', currentTenantId] },
+                      ],
+                    },
+                    {
+                      $or: [
+                        { $eq: ['$assignedTo', '$$userId'] },
+                        { $eq: ['$assignedTo', '$$userIdStr'] },
+                        { $eq: ['$assignedTo.id', '$$userIdStr'] },
+                        { $eq: ['$assignedTo.id', '$$userId'] },
+                        { $eq: ['$assignedTo._id', '$$userId'] },
+                        { $eq: ['$assignedTo._id', '$$userIdStr'] },
+                        { $eq: ['$assignedTo.name', '$$userName'] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: 'allAssignedLeads',
+        },
+      },
+      {
+        $addFields: {
+          wonLeads: {
+            $filter: {
+              input: '$allAssignedLeads',
+              as: 'lead',
+              cond: {
+                $or: [
+                  { $eq: ['$$lead.stage', 'Won / Closed'] },
+                  { $eq: ['$$lead.stage', 'Won'] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          closedRevenue: {
+            $reduce: {
+              input: '$wonLeads',
+              initialValue: 0,
+              in: {
+                $add: [
+                  '$$value',
+                  { $ifNull: ['$$this.estimatedValue', { $ifNull: ['$$this.value', 0] }] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          role: 1,
+          email: 1,
+          department: 1,
+          closedRevenue: 1,
+        },
+      },
+      {
+        $sort: { name: 1 },
+      },
+    ]);
 
     res.status(200).json({
       success: true,

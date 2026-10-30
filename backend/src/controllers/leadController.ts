@@ -119,8 +119,9 @@ export const createLead = async (
 
     // Resolve assigned sales rep dynamically from User collection if user ID or object is passed
     let resolvedAssignedTo = {
+      id: req.user?._id?.toString() || req.user?.id || '',
       name: req.user?.fullName || req.user?.name || 'Sales Agent',
-      avatar: req.user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      avatar: req.user?.avatar || '',
       role: req.user?.role || 'Sales Agent',
     };
 
@@ -129,15 +130,17 @@ export const createLead = async (
         const assignedUser = await User.findById(assignedTo).select('_id name role profilePicture avatar');
         if (assignedUser) {
           resolvedAssignedTo = {
+            id: assignedUser._id.toString(),
             name: assignedUser.name,
-            avatar: assignedUser.profilePicture || assignedUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            avatar: assignedUser.profilePicture || assignedUser.avatar || '',
             role: assignedUser.role || 'Sales Agent',
           };
         }
       } else if (typeof assignedTo === 'object' && assignedTo.name) {
         resolvedAssignedTo = {
+          id: (assignedTo.id || assignedTo._id)?.toString() || '',
           name: assignedTo.name,
-          avatar: assignedTo.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          avatar: assignedTo.avatar || '',
           role: assignedTo.role || 'Sales Agent',
         };
       }

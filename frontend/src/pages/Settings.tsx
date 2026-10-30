@@ -99,6 +99,16 @@ export const Settings: React.FC = () => {
 
   const isAdmin = user?.role === 'Company Admin' || (user?.role as string) === 'Super Admin';
 
+  // Standard USD formatting function
+  const formatCurrency = (val: number | string): string => {
+    const num = typeof val === 'number' ? val : Number(String(val).replace(/[^0-9.-]/g, '')) || 0;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(num);
+  };
+
   // Workspace Seat Statistics State
   const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
   const [isSeatStatsLoading, setIsSeatStatsLoading] = useState<boolean>(false);
@@ -741,7 +751,7 @@ export const Settings: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-200">
-                          {member.closedRevenue || member.closedValue || '$0'}
+                          {member.closedRevenue ? formatCurrency(member.closedRevenue) : '$0'}
                         </td>
 
                         <td className="py-3.5 px-6 text-right">

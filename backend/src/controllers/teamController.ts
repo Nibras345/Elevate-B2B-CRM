@@ -8,6 +8,7 @@ import { Tenant } from '../models/Tenant';
 import { Notification } from '../models/Notification';
 import { AuthRequest } from '../types';
 import { sendInvitationEmail } from '../utils/emailService';
+import { getTenantContext } from '../utils/tenantHelper';
 
 /**
  * @route   POST /api/team/invite
@@ -222,25 +223,153 @@ export const getTeamMembers = async (
       return;
     }
 
-    // 1. Fetch all users belonging to this tenant (querying tenantId, tenantIds array, or workspaces array)
-    const users = await User.find({
-      $or: [
-        { tenantId: currentTenantId },
-        { tenantIds: currentTenantId },
-        { 'workspaces.tenantId': currentTenantId },
-      ],
-    })
-      .select('-password')
-      .sort({ createdAt: -1 });
+    // Resolve tenant ObjectId and Code for strict tenant isolation in MongoDB queries
+    let tenantObjectId: mongoose.Types.ObjectId | null = null;
+    let tenantCode = currentTenantId;
+
+    try {
+      const context = await getTenantContext(req);
+      tenantObjectId = context.tenantObjectId;
+      tenantCode = context.tenantCode;
+    } catch {
+      if (mongoose.isValidObjectId(currentTenantId)) {
+        tenantObjectId = new mongoose.Types.ObjectId(currentTenantId);
+      }
+    }
+
+    // 1. Build match criteria for users belonging to this tenant
+    const userMatchConditions: any[] = [
+      { tenantId: currentTenantId },
+      { tenantIds: currentTenantId },
+      { 'workspaces.tenantId': currentTenantId },
+    ];
+
+    if (tenantCode && tenantCode !== currentTenantId) {
+      userMatchConditions.push(
+        { tenantId: tenantCode },
+        { tenantIds: tenantCode },
+        { 'workspaces.tenantId': tenantCode }
+      );
+    }
+
+    if (tenantObjectId) {
+      userMatchConditions.push(
+        { tenant: tenantObjectId },
+        { tenants: tenantObjectId },
+        { 'workspaces.tenant': tenantObjectId }
+      );
+    }
+
+    // MongoDB Aggregation Pipeline for Users:
+    // a) $match: Get users belonging to req.user.tenantId
+    // b) $lookup: Join with the leads collection where leads.assignedTo matches the user AND leads.tenantId equals req.user.tenantId
+    // c) $addFields / $filter: Filter the joined leads to only keep those where stage is 'Won / Closed'
+    // d) $reduce: Calculate the sum of estimatedValue of those filtered leads
+    // e) Project this sum as a new field called closedRevenue for each user
+    const usersWithRevenue = await User.aggregate([
+      {
+        $match: {
+          $or: userMatchConditions,
+        },
+      },
+      {
+        $lookup: {
+          from: 'leads',
+          let: {
+            userId: '$_id',
+            userIdStr: { $toString: '$_id' },
+            userName: '$name',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    // Strict tenant isolation:
+                    {
+                      $or: [
+                        ...(tenantObjectId ? [{ $eq: ['$tenantId', tenantObjectId] }] : []),
+                        { $eq: ['$tenantId', currentTenantId] },
+                        { $eq: ['$tenantCode', tenantCode] },
+                        { $eq: ['$tenantCode', currentTenantId] },
+                      ],
+                    },
+                    // Match assigned sales rep:
+                    {
+                      $or: [
+                        { $eq: ['$assignedTo', '$$userId'] },
+                        { $eq: ['$assignedTo', '$$userIdStr'] },
+                        { $eq: ['$assignedTo.id', '$$userIdStr'] },
+                        { $eq: ['$assignedTo.id', '$$userId'] },
+                        { $eq: ['$assignedTo._id', '$$userId'] },
+                        { $eq: ['$assignedTo._id', '$$userIdStr'] },
+                        { $eq: ['$assignedTo.name', '$$userName'] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: 'allAssignedLeads',
+        },
+      },
+      {
+        $addFields: {
+          // c) Filter the joined leads to only keep those where stage is 'Won / Closed' (or 'Won')
+          wonLeads: {
+            $filter: {
+              input: '$allAssignedLeads',
+              as: 'lead',
+              cond: {
+                $or: [
+                  { $eq: ['$$lead.stage', 'Won / Closed'] },
+                  { $eq: ['$$lead.stage', 'Won'] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          // d) & e) Calculate the sum of estimatedValue and project as closedRevenue
+          closedRevenue: {
+            $reduce: {
+              input: '$wonLeads',
+              initialValue: 0,
+              in: {
+                $add: [
+                  '$$value',
+                  { $ifNull: ['$$this.estimatedValue', { $ifNull: ['$$this.value', 0] }] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          password: 0,
+          resetOtp: 0,
+          resetOtpExpiry: 0,
+          allAssignedLeads: 0,
+          wonLeads: 0,
+        },
+      },
+      {
+        $sort: { createdAt: -1 },
+      },
+    ]);
 
     // 2. Fetch all pending invitations for this tenant
     const invitations = await Invitation.find({
       tenantId: currentTenantId,
     }).sort({ createdAt: -1 });
 
-    // 3. Format active users with role/dept specific to this workspace
-    const formattedUsers = users.map((u) => {
-      const workspaceInfo = u.workspaces?.find((w) => w.tenantId === currentTenantId);
+    // 3. Format active users with role/dept specific to this workspace & calculated closedRevenue
+    const formattedUsers = usersWithRevenue.map((u: any) => {
+      const workspaceInfo = u.workspaces?.find((w: any) => w.tenantId === currentTenantId || w.tenantId === tenantCode);
       const roleInWorkspace = workspaceInfo?.role || u.role;
       const deptInWorkspace = workspaceInfo?.department || u.department || 'General';
       const statusInWorkspace =
@@ -257,9 +386,9 @@ export const getTeamMembers = async (
         avatar:
           u.profilePicture ||
           u.avatar ||
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          '',
         phone: u.phone || '',
-        closedRevenue: '$0',
+        closedRevenue: u.closedRevenue || 0,
         type: 'user' as const,
         createdAt: u.createdAt,
       };
@@ -274,10 +403,9 @@ export const getTeamMembers = async (
       role: inv.role,
       department: inv.department || 'General',
       status: 'Invited' as const,
-      avatar:
-        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+      avatar: '',
       phone: '',
-      closedRevenue: '$0',
+      closedRevenue: 0,
       type: 'invitation' as const,
       expiresAt: inv.expiresAt,
       createdAt: inv.createdAt,

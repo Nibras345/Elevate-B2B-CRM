@@ -104,7 +104,7 @@ export interface TeamMember {
   phone?: string;
   leadsCount?: number;
   closedValue?: string;
-  closedRevenue?: string;
+  closedRevenue?: number | string;
   type?: 'user' | 'invitation';
   expiresAt?: string;
   createdAt?: string;
