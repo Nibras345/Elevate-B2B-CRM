@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDashboardStats } from '../controllers/dashboardController';
+import { getDashboardStats, exportDashboardData } from '../controllers/dashboardController';
 import { protect, tenantGuard } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -10,6 +10,13 @@ const router = Router();
  * @access  Private (JWT Protected)
  */
 router.get('/stats', protect, tenantGuard, getDashboardStats);
+
+/**
+ * @route   GET /api/dashboard/export
+ * @desc    Export CRM dashboard data (Invoices and Leads) as CSV strictly filtered by tenant and timeframe
+ * @access  Private (JWT Protected)
+ */
+router.get('/export', protect, tenantGuard, exportDashboardData);
 
 export default router;
 

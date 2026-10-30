@@ -530,3 +530,214 @@ export const getDashboardStats = async (
   }
 };
 
+/**
+ * Helper to escape and quote fields for RFC 4180 CSV standard
+ */
+const escapeCsv = (val: any): string => {
+  if (val === null || val === undefined) return '';
+  const str = String(val).trim();
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
+
+/**
+ * Determine date boundaries from timeframe string
+ */
+const parseTimeframeRange = (timeframe?: string): { startDate: Date | null; endDate: Date; label: string } => {
+  const now = new Date();
+  const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const tf = (timeframe || '').trim().toLowerCase();
+
+  if (tf === 'last 7 days' || tf === 'last_7_days' || tf === '7d') {
+    const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    startDate.setHours(0, 0, 0, 0);
+    return { startDate, endDate, label: 'Last 7 Days' };
+  }
+
+  if (tf === 'this month' || tf === 'month' || tf === 'this_month') {
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    return { startDate, endDate, label: 'This Month' };
+  }
+
+  if (tf === 'this quarter' || tf === 'quarter' || tf === 'this_quarter') {
+    const currentQuarterIndex = Math.floor(now.getMonth() / 3);
+    const startDate = new Date(now.getFullYear(), currentQuarterIndex * 3, 1, 0, 0, 0, 0);
+    return { startDate, endDate, label: 'This Quarter' };
+  }
+
+  if (tf === 'year to date' || tf === 'ytd' || tf === 'year_to_date' || tf === 'this year' || tf === 'this_year') {
+    const startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    return { startDate, endDate, label: 'Year to Date' };
+  }
+
+  if (tf === 'all' || tf === 'all time' || tf === 'all_time') {
+    return { startDate: null, endDate, label: 'All Time' };
+  }
+
+  // Fallback default: This Month
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  return { startDate, endDate, label: timeframe || 'This Month' };
+};
+
+/**
+ * @route   GET /api/dashboard/export
+ * @desc    Export CRM dashboard data (Invoices and Leads) as CSV strictly filtered by tenant and timeframe
+ * @access  Private (JWT Protected)
+ */
+export const exportDashboardData = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // 1. Strict Tenant Context Resolution
+    const { tenantObjectId, tenantCode } = await getTenantContext(req);
+
+    // 2. Parse timeframe
+    const timeframeParam = (req.query.timeframe as string) || 'This Month';
+    const { startDate, endDate, label: timeframeLabel } = parseTimeframeRange(timeframeParam);
+
+    // 3. Build queries with strict tenant isolation
+    const invoiceQuery: any = { tenantId: tenantObjectId };
+    const leadQuery: any = { tenantId: tenantObjectId };
+
+    if (startDate) {
+      invoiceQuery.$or = [
+        { issueDate: { $gte: startDate, $lte: endDate } },
+        { createdAt: { $gte: startDate, $lte: endDate } },
+      ];
+      leadQuery.$or = [
+        { createdAt: { $gte: startDate, $lte: endDate } },
+        { updatedAt: { $gte: startDate, $lte: endDate } },
+      ];
+    }
+
+    // 4. Fetch relevant Invoices and Leads
+    const [invoices, leads] = await Promise.all([
+      Invoice.find(invoiceQuery)
+        .populate('clientId', 'name contactName companyName company email')
+        .sort({ issueDate: -1, createdAt: -1 })
+        .lean(),
+      Lead.find(leadQuery)
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
+
+    // 5. Build CSV structure with sections
+    const csvLines: string[] = [];
+
+    // Header metadata
+    csvLines.push('CRM EXECUTIVE DASHBOARD REPORT');
+    csvLines.push(`Tenant Workspace,${escapeCsv(tenantCode)}`);
+    csvLines.push(`Report Timeframe,${escapeCsv(timeframeLabel)}`);
+    csvLines.push(`Export Date,${escapeCsv(new Date().toISOString().split('T')[0])}`);
+    csvLines.push(`Total Invoices,${invoices.length}`);
+    csvLines.push(`Total Leads,${leads.length}`);
+    csvLines.push(''); // Blank line separator
+
+    // SECTION 1: INVOICES
+    // Required fields: Date, Client, Amount, Status
+    csvLines.push('--- SECTION 1: INVOICES ---');
+    csvLines.push(['Invoice Number', 'Date', 'Client', 'Amount ($)', 'Status', 'Due Date', 'Payment Terms'].map(escapeCsv).join(','));
+
+    let totalInvoicedAmount = 0;
+    let totalPaidAmount = 0;
+
+    if (invoices.length === 0) {
+      csvLines.push('No invoices found for this timeframe,,,,,,');
+    } else {
+      for (const inv of invoices) {
+        const invDate = inv.issueDate || inv.createdAt;
+        const formattedDate = invDate ? new Date(invDate).toISOString().split('T')[0] : '';
+        const dueDate = inv.dueDate ? new Date(inv.dueDate).toISOString().split('T')[0] : '';
+        const clientName =
+          inv.company ||
+          inv.clientName ||
+          (inv.clientId as any)?.companyName ||
+          (inv.clientId as any)?.company ||
+          (inv.clientId as any)?.contactName ||
+          (inv.clientId as any)?.name ||
+          'Valued Client';
+        const amount = Number(inv.grandTotal ?? inv.total ?? 0);
+        totalInvoicedAmount += amount;
+        if (inv.status === 'Paid') {
+          totalPaidAmount += amount;
+        }
+
+        csvLines.push(
+          [
+            inv.invoiceNumber || String(inv._id),
+            formattedDate,
+            clientName,
+            amount.toFixed(2),
+            inv.status || 'Pending',
+            dueDate,
+            inv.paymentTerms || 'Net 30 Days',
+          ]
+            .map(escapeCsv)
+            .join(',')
+        );
+      }
+      csvLines.push(
+        ['TOTAL INVOICED', '', '', totalInvoicedAmount.toFixed(2), `PAID: $${totalPaidAmount.toFixed(2)}`, '', '']
+          .map(escapeCsv)
+          .join(',')
+      );
+    }
+
+    csvLines.push(''); // Blank row separator
+    csvLines.push(''); // Blank row separator
+
+    // SECTION 2: LEADS
+    // Required fields: Date Created, Deal Name, Value, Stage
+    csvLines.push('--- SECTION 2: LEADS ---');
+    csvLines.push(['Date Created', 'Deal Name', 'Value ($)', 'Stage', 'Contact Name', 'Email', 'Priority', 'Assigned Rep'].map(escapeCsv).join(','));
+
+    let totalPipelineValue = 0;
+
+    if (leads.length === 0) {
+      csvLines.push('No leads found for this timeframe,,,,,,,');
+    } else {
+      for (const lead of leads) {
+        const leadDate = lead.createdAt;
+        const formattedDate = leadDate ? new Date(leadDate).toISOString().split('T')[0] : '';
+        const dealName = lead.companyName || lead.contactName || 'Lead Opportunity';
+        const value = Number(lead.estimatedValue ?? (lead as any).value ?? 0);
+        totalPipelineValue += value;
+
+        csvLines.push(
+          [
+            formattedDate,
+            dealName,
+            value.toFixed(2),
+            lead.stage || 'New Lead',
+            lead.contactName || '',
+            lead.email || '',
+            lead.priority || 'Medium',
+            lead.assignedTo?.name || 'Unassigned',
+          ]
+            .map(escapeCsv)
+            .join(',')
+        );
+      }
+      csvLines.push(
+        ['TOTAL PIPELINE VALUE', '', totalPipelineValue.toFixed(2), '', '', '', '', '']
+          .map(escapeCsv)
+          .join(',')
+      );
+    }
+
+    const csvContent = csvLines.join('\r\n');
+
+    // 6. Set HTTP response headers for file download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="CRM_Dashboard_Export.csv"');
+    res.status(200).send(csvContent);
+  } catch (error) {
+    console.error('[Export Dashboard Data Error]:', error);
+    next(error);
+  }
+};
+

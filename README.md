@@ -320,6 +320,7 @@ cd Elevate-B2B-CRM
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/dashboard/stats` | Private | Fetch real-time aggregated executive dashboard metrics (topMetrics, monthlyRevenue, leadsByStage, totalPipelineValue, recentActivities) strictly isolated by tenant |
+| `GET` | `/api/dashboard/export` | Private | Export CRM report as CSV containing Invoices and Leads filtered by `timeframe` (Last 7 Days, This Month, This Quarter, Year to Date) with strict tenant isolation |
 
 ### 📈 Leads Pipeline (`/api/leads`)
 | Method | Endpoint | Access | Description |

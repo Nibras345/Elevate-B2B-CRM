@@ -37,6 +37,7 @@ export const Dashboard: React.FC = () => {
   // STRICT RULE: No static mock data. Initialize dashboardData as null and fetch strictly from backend
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [timeRange, setTimeRange] = useState('This Month');
   const [activeActivityTab, setActiveActivityTab] = useState('all');
 
@@ -155,8 +156,63 @@ export const Dashboard: React.FC = () => {
     (s) => s.stage === 'Proposal Sent'
   );
 
-  const handleExport = () => {
-    notify('Executive KPI summary report exported as CSV', 'info');
+  // Handle CSV export of dashboard metrics, invoices, and leads strictly for authenticated tenant and selected timeframe
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const token = localStorage.getItem('nexcrm_jwt_token');
+
+      const response = await axios.get(
+        `/api/dashboard/export?timeframe=${encodeURIComponent(timeRange)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          responseType: 'blob',
+        }
+      );
+
+      // Process blob response and trigger download
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Extract filename from Content-Disposition if present, else fallback to CRM_Dashboard_Export.csv
+      let filename = 'CRM_Dashboard_Export.csv';
+      const disposition = response.headers ? response.headers['content-disposition'] : null;
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      notify(`Dashboard report (${timeRange}) downloaded successfully!`, 'success');
+    } catch (err: any) {
+      console.error('[Dashboard Export Error]:', err);
+      let errorMsg = 'Failed to export dashboard report. Please try again.';
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const parsed = JSON.parse(text);
+          if (parsed.message) errorMsg = parsed.message;
+        } catch {
+          // fallback to default error message
+        }
+      } else if (err.response?.data?.message) {
+        errorMsg = err.response.data.message;
+      }
+      notify(errorMsg, 'error');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -207,10 +263,16 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-2xs transition-colors cursor-pointer"
+            disabled={isExporting}
+            title="Export CRM dashboard report as CSV"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
           >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span className="hidden sm:inline">Export</span>
+            {isExporting ? (
+              <Loader2 className="w-3.5 h-3.5 text-slate-500 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+            )}
+            <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export'}</span>
           </button>
 
           <button
