@@ -20,6 +20,8 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Multi-Workspace Membership**: Users can belong to multiple distinct tenant organizations simultaneously using a unified corporate account.
 - **Per-Workspace Roles**: A single user can act as `Company Admin` in one workspace and `Sales Agent` in another, with seamless contextual switching.
 - **Safe Member Detachment**: Removing a member uses MongoDB `$pull` on the user's `workspaces` array, leaving their accounts and relationships in other workspaces intact.
+- **Interactive Confirmation Dialog**: Trash icon triggers a custom confirmation modal ("Remove Team Member") ensuring no accidental member removal, complete with loading spinners and state cleanup.
+- **Strict Role & Self-Deletion Guards**: Prevents Company Admins from deleting their own active accounts (`400 Bad Request`), restricts removal rights exclusively to admins, ensures strict `tenantId` isolation, and fully supports all system roles including `Support`.
 
 ### 👥 2. Dynamic Seat Management & Governance
 - **Configurable Capacity**: Tenant workspaces feature dynamic seat thresholds (`maxSeats`, default: 25).
@@ -296,7 +298,8 @@ cd Elevate-B2B-CRM
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/team` | Private | Retrieve all active members and pending invitations with dynamic `closedRevenue` aggregation |
 | `POST` | `/api/team/invite` | Admin | Send email invitation with seat limit verification |
-| `DELETE` | `/api/team/remove/:id` | Admin | Detach member (`$pull`) or cancel pending invite |
+| `DELETE` | `/api/team/:id` | Admin | Detach member (`$pull`) or cancel pending invite (with confirmation dialog & self-deletion guard) |
+| `DELETE` | `/api/team/remove/:id` | Admin | Alias for member detachment / invite cancellation |
 | `GET` | `/api/team/invitation/:token` | Public | Validate invite token and retrieve tenant metadata |
 | `POST` | `/api/team/accept-invite/:token` | Public | Accept invite (onboards new user or attaches workspace) |
 

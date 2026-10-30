@@ -34,7 +34,7 @@ const InvitationSchema: Schema<IInvitation> = new Schema(
     role: {
       type: String,
       required: [true, 'Team member role is required'],
-      enum: ['Company Admin', 'Sales Agent', 'Support', 'Employee'],
+      enum: ['Company Admin', 'Sales Agent', 'Support', 'Employee', 'Super Admin'],
       default: 'Sales Agent',
     },
     department: {

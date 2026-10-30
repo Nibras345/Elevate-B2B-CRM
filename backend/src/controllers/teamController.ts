@@ -756,20 +756,48 @@ export const removeTeamMember = async (
       return;
     }
 
-    // Prevent self-deletion
-    const currentUserId = req.user?.id || req.user?._id?.toString();
-    if (id === currentUserId) {
+    // c) Self-deletion check: A Company Admin cannot delete themselves
+    const userToDeleteId = id;
+    const currentUserId = req.user?._id ? req.user._id.toString() : (req.user?.id ? req.user.id.toString() : '');
+    if (
+      userToDeleteId === currentUserId ||
+      (req.user?._id && userToDeleteId === req.user._id.toString()) ||
+      (req.user?.id && userToDeleteId === req.user.id.toString())
+    ) {
       res.status(400).json({
         success: false,
-        message: 'Security Guard: You cannot remove your own active administrator account.',
+        message: 'Security constraint: You cannot delete your own active administrator account.',
       });
       return;
     }
 
+    // b) Target user/invite's tenantId MUST match req.user.tenantId
+    // Resolve Tenant ObjectId and Code to align with GET /api/team
+    let tenantObjectId: mongoose.Types.ObjectId | null = null;
+    let tenantCode = currentTenantId;
+
+    try {
+      const context = await getTenantContext(req);
+      tenantObjectId = context.tenantObjectId;
+      tenantCode = context.tenantCode;
+    } catch {
+      if (mongoose.isValidObjectId(currentTenantId)) {
+        tenantObjectId = new mongoose.Types.ObjectId(currentTenantId);
+      }
+    }
+
     // 1. Check if ID belongs to an Invitation in this tenant
+    const inviteMatchConditions: any[] = [{ tenantId: currentTenantId }];
+    if (tenantCode && tenantCode !== currentTenantId) {
+      inviteMatchConditions.push({ tenantId: tenantCode });
+    }
+    if (tenantObjectId) {
+      inviteMatchConditions.push({ tenant: tenantObjectId });
+    }
+
     const deletedInvite = await Invitation.findOneAndDelete({
-      _id: id,
-      tenantId: currentTenantId,
+      _id: userToDeleteId,
+      $or: inviteMatchConditions,
     });
 
     if (deletedInvite) {
@@ -781,16 +809,35 @@ export const removeTeamMember = async (
     }
 
     // 2. Check if ID belongs to a registered User in this workspace
-    const targetUser = await User.findOne({
-      _id: id,
-      $or: [
-        { tenantId: currentTenantId },
-        { tenantIds: currentTenantId },
-        { 'workspaces.tenantId': currentTenantId },
-      ],
+    // Zero hardcoded role restrictions - Company Admin can delete ANY role (Employee, Support, Sales Agent, etc.)
+    const userMatchConditions: any[] = [
+      { tenantId: currentTenantId },
+      { tenantIds: currentTenantId },
+      { 'workspaces.tenantId': currentTenantId },
+    ];
+
+    if (tenantCode && tenantCode !== currentTenantId) {
+      userMatchConditions.push(
+        { tenantId: tenantCode },
+        { tenantIds: tenantCode },
+        { 'workspaces.tenantId': tenantCode }
+      );
+    }
+
+    if (tenantObjectId) {
+      userMatchConditions.push(
+        { tenant: tenantObjectId },
+        { tenants: tenantObjectId },
+        { 'workspaces.tenant': tenantObjectId }
+      );
+    }
+
+    const userToDelete = await User.findOne({
+      _id: userToDeleteId,
+      $or: userMatchConditions,
     });
 
-    if (!targetUser) {
+    if (!userToDelete) {
       res.status(404).json({
         success: false,
         message: 'Team member or invitation not found in this workspace.',
@@ -798,44 +845,47 @@ export const removeTeamMember = async (
       return;
     }
 
-    // Do NOT delete the entire user document (as they might be part of other tenants).
-    // Instead, use $pull to remove currentTenantId and workspace entry
+    // Check if user has active memberships in other tenant workspaces
     const remainingWorkspaces =
-      targetUser.workspaces?.filter((w) => w.tenantId !== currentTenantId) || [];
+      userToDelete.workspaces?.filter(
+        (w) =>
+          w.tenantId !== currentTenantId &&
+          (tenantCode ? w.tenantId !== tenantCode : true) &&
+          (tenantObjectId ? String(w.tenant) !== String(tenantObjectId) : true)
+      ) || [];
 
-    let fallbackTenantId = targetUser.tenantId;
-    let fallbackTenant = targetUser.tenant;
-    let fallbackRole = targetUser.role;
-    let fallbackDept = targetUser.department;
+    if (remainingWorkspaces.length > 0) {
+      // User is part of other workspaces: safely detach from this workspace only
+      const fallbackTenantId = remainingWorkspaces[0].tenantId;
+      const fallbackTenant = remainingWorkspaces[0].tenant;
+      const fallbackRole = remainingWorkspaces[0].role;
+      const fallbackDept = remainingWorkspaces[0].department;
 
-    if (targetUser.tenantId === currentTenantId) {
-      if (remainingWorkspaces.length > 0) {
-        fallbackTenantId = remainingWorkspaces[0].tenantId;
-        fallbackTenant = remainingWorkspaces[0].tenant;
-        fallbackRole = remainingWorkspaces[0].role;
-        fallbackDept = remainingWorkspaces[0].department;
-      } else {
-        fallbackTenantId = '';
-        fallbackTenant = undefined;
-      }
+      const tenantIdsToRemove = [currentTenantId, tenantCode].filter(Boolean);
+
+      await User.findByIdAndUpdate(
+        userToDelete._id,
+        {
+          $pull: {
+            tenantIds: { $in: tenantIdsToRemove },
+            ...(tenantObjectId ? { tenants: tenantObjectId } : {}),
+            workspaces: {
+              tenantId: { $in: tenantIdsToRemove },
+            },
+          },
+          $set: {
+            tenantId: fallbackTenantId,
+            tenant: fallbackTenant,
+            role: fallbackRole,
+            department: fallbackDept,
+          },
+        },
+        { new: true }
+      );
+    } else {
+      // User only belongs to this workspace: delete the user record directly
+      await userToDelete.deleteOne();
     }
-
-    await User.findByIdAndUpdate(
-      targetUser._id,
-      {
-        $pull: {
-          tenantIds: currentTenantId,
-          workspaces: { tenantId: currentTenantId },
-        },
-        $set: {
-          tenantId: fallbackTenantId,
-          tenant: fallbackTenant,
-          role: fallbackRole,
-          department: fallbackDept,
-        },
-      },
-      { new: true }
-    );
 
     res.status(200).json({
       success: true,
