@@ -101,6 +101,21 @@ export const authorizeRoles = (...roles: UserRole[]) => {
 };
 
 /**
+ * Admin Access Guard
+ * Restricts route access strictly to Company Admin (and Super Admin)
+ */
+export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (!req.user || (req.user.role !== 'Company Admin' && req.user.role !== 'Super Admin')) {
+    res.status(403).json({
+      success: false,
+      message: 'Access Denied: Only Company Admins can perform this action.',
+    });
+    return;
+  }
+  next();
+};
+
+/**
  * Tenant Isolation Guard
  * Ensures queries never leak data across tenants
  */

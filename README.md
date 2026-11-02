@@ -32,6 +32,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Dynamic Closed Revenue Aggregation**: Team members table calculates actual won deal totals per user via a multi-stage MongoDB aggregation pipeline (`$lookup` across tenant leads, `$filter` for `Won / Closed` stage, and `$reduce` summing `estimatedValue`), projecting real-time revenue instead of static $0 placeholders.
 
 ### ✉️ 3. Transactional Email Invitation Onboarding
+- **Company Admin-Exclusive Invitation Authority**: Only the 'Company Admin' role can trigger new invitations. The "+ Invite User" button and all invite modals are conditionally rendered and completely hidden from 'Employee' and 'Support' roles on the frontend (`currentUser?.role === 'Company Admin'`). The backend route (`POST /api/team/invite`) is protected with dedicated `requireAdmin` middleware, blocking non-admin attempts with `403 Forbidden: "Access Denied: Only Company Admins can perform this action."`.
 - **Cryptographic Token Verification**: Generates secure 32-byte hexadecimal tokens stored in an `Invitation` model with a 7-day expiration policy.
 - **Dual Onboarding Paths**:
   - **New Users**: Land on `/invite/accept/:token`, set their full name and password, and instantly join the workspace.
@@ -311,7 +312,7 @@ cd Elevate-B2B-CRM
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/team` | Private | Retrieve all active members and pending invitations with dynamic `closedRevenue` aggregation |
-| `POST` | `/api/team/invite` | Admin | Send email invitation with strict seat limit verification (HTTP 403 when limit reached) |
+| `POST` | `/api/team/invite` | Admin (`requireAdmin`) | Send email invitation with strict admin-only restriction and seat limit verification |
 | `DELETE` | `/api/team/:id` | Admin | Detach member (`$pull`) or cancel pending invite (with confirmation dialog & self-deletion guard) |
 | `DELETE` | `/api/team/remove/:id` | Admin | Alias for member detachment / invite cancellation |
 | `GET` | `/api/team/invitation/:token` | Public | Validate invite token and retrieve tenant metadata |
@@ -382,7 +383,7 @@ cd Elevate-B2B-CRM
 
 1. **Context Injection via Middleware**: Every private request passes through `protect`, which decodes the JWT and binds `req.user` and `req.tenantId`.
 2. **Tenant Boundary Enforcement (`tenantGuard`)**: Queries are restricted to the calling tenant's workspace using compound filters (`{ tenantId: tenantObjectId }`).
-3. **Role Validation (`authorizeRoles`)**: Critical operations (inviting teammates, cancelling invites, modifying organization settings) are strictly restricted to `Company Admin` and `Super Admin`.
+3. **Role Validation & Admin Guards (`requireAdmin` / `authorizeRoles`)**: Critical governance operations—including member invitations (`requireAdmin`), cancelling invites, and modifying organization preferences—are strictly restricted to `Company Admin`. Non-admin roles attempting invitation endpoints receive `403 Forbidden: "Access Denied: Only Company Admins can perform this action."`.
 4. **Self-Deletion Prevention**: Administrators cannot delete or detach their own active workspace account from the team governance interface.
 5. **Record-Level Ownership Enforcement**: Schemas for `Lead`, `Client`, and `Invoice` require a `createdBy` reference to `User`. Company Admins can edit or delete any record in their workspace, while standard Employees can only modify or delete records they personally created (or are assigned to), returning `403 Forbidden` if unauthorized.
 
