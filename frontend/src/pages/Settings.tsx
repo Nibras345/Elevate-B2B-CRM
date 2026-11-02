@@ -141,7 +141,10 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const isSeatLimitReached = seatStats.usedSeats >= seatStats.maxSeats;
+  // Local members alias and dynamic seat limit calculations
+  const members = team;
+  const seatLimit = (tenantSettings as any)?.seatLimit ?? seatStats.maxSeats ?? 25;
+  const isSeatLimitReached = members.length >= 25 || members.length >= seatLimit || seatStats.usedSeats >= seatLimit;
 
   // Fetch Team Members from Route 2: GET /api/team
   const fetchTeamMembers = async () => {
@@ -200,7 +203,7 @@ export const Settings: React.FC = () => {
   const handleInviteUser = async (e: FormEvent) => {
     e.preventDefault();
     if (isSeatLimitReached) {
-      notify('Seat limit reached. Please upgrade your plan.', 'error');
+      notify(`Seat limit of ${seatLimit} reached. Upgrade plan required.`, 'error');
       return;
     }
 
@@ -247,9 +250,16 @@ export const Settings: React.FC = () => {
         notify(response.data.message || 'Failed to send invitation.', 'error');
       }
     } catch (err: any) {
-      const errMsg =
-        err.response?.data?.message || 'Server error while sending invitation email.';
-      notify(errMsg, 'error');
+      if (err.response?.status === 403) {
+        notify(
+          `Seat limit of ${seatLimit} reached. Upgrade plan required.`,
+          'error'
+        );
+      } else {
+        const errMsg =
+          err.response?.data?.message || 'Server error while sending invitation email.';
+        notify(errMsg, 'error');
+      }
     } finally {
       setIsInviting(false);
     }
@@ -556,25 +566,25 @@ export const Settings: React.FC = () => {
                   type="button"
                   onClick={() => {
                     if (isSeatLimitReached) {
-                      notify('Seat limit reached. Please upgrade your plan.', 'error');
+                      notify(`Seat limit of ${seatLimit} reached. Upgrade plan required.`, 'error');
                       return;
                     }
                     setIsInviteModalOpen(true);
                   }}
-                  disabled={isSeatLimitReached}
+                  disabled={members.length >= 25 || isSeatLimitReached}
                   className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all ${
-                    isSeatLimitReached
+                    members.length >= 25 || isSeatLimitReached
                       ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border border-slate-300 dark:border-slate-700'
                       : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20 cursor-pointer'
                   }`}
-                  title={isSeatLimitReached ? 'Seat limit reached. Please upgrade your plan.' : undefined}
+                  title={members.length >= 25 || isSeatLimitReached ? 'Maximum seats reached' : undefined}
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Invite User</span>
                 </button>
-                {isSeatLimitReached && (
+                {(members.length >= 25 || isSeatLimitReached) && (
                   <div className="absolute right-0 top-full mt-2 px-2.5 py-1 bg-slate-900 text-white text-[11px] rounded-md shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none">
-                    Seat limit reached. Please upgrade your plan.
+                    Maximum seats reached
                   </div>
                 )}
               </div>
@@ -811,7 +821,7 @@ export const Settings: React.FC = () => {
                 <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
                   <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600" />
                   <span>
-                    Seat limit reached ({seatStats.usedSeats} / {seatStats.maxSeats} seats). Please upgrade your plan to invite more members.
+                    Seat limit of {seatLimit} reached ({seatStats.usedSeats} / {seatStats.maxSeats} seats). Please upgrade your plan to invite more members.
                   </span>
                 </div>
               )}
@@ -886,7 +896,7 @@ export const Settings: React.FC = () => {
                       ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed shadow-none'
                       : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20 cursor-pointer disabled:opacity-60'
                   }`}
-                  title={isSeatLimitReached ? 'Seat limit reached. Please upgrade your plan.' : undefined}
+                  title={isSeatLimitReached ? 'Maximum seats reached' : undefined}
                 >
                   {isInviting ? (
                     <>

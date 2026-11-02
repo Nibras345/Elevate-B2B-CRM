@@ -47,9 +47,9 @@ export const getTenantStats = async (
     // 4. Calculate total seats in use (Active Users + Pending Invites)
     const usedSeats = activeUsersCount + pendingInvitesCount;
 
-    // 5. Fetch tenant configuration for maxSeats
+    // 5. Fetch tenant configuration for maxSeats / seatLimit
     const tenant = await Tenant.findOne({ tenantId: currentTenantId });
-    const maxSeats = tenant?.maxSeats ?? 25;
+    const maxSeats = (tenant as any)?.seatLimit ?? tenant?.maxSeats ?? 25;
 
     // 6. Return standard JSON response
     res.status(200).json({
