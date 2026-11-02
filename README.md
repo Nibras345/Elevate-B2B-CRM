@@ -28,6 +28,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Real-Time Seat Aggregation**: The `GET /api/tenant/stats` endpoint calculates `usedSeats` as `(Active Users Count) + (Pending Invites Count)` in real time.
 - **Seat Guard Enforcement**: Both frontend and backend reject invitation requests when tenant capacity is exhausted (`400 Bad Request: "Seat limit reached"`).
 - **Instant Client-Side Sync**: Employs global browser event dispatching (`crm_seat_stats_updated`) to update the Sidebar subscription card and Team settings in real-time.
+- **Dynamic Closed Revenue Aggregation**: Team members table calculates actual won deal totals per user via a multi-stage MongoDB aggregation pipeline (`$lookup` across tenant leads, `$filter` for `Won / Closed` stage, and `$reduce` summing `estimatedValue`), projecting real-time revenue instead of static $0 placeholders.
 
 ### ✉️ 3. Transactional Email Invitation Onboarding
 - **Cryptographic Token Verification**: Generates secure 32-byte hexadecimal tokens stored in an `Invitation` model with a 7-day expiration policy.
@@ -40,12 +41,15 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Visual Kanban Board**: Interactive stages (`New Lead`, `Contacted`, `Proposal Sent`, `Negotiation`, `Won / Closed`) with real-time stage transitions.
 - **Dynamic Assigned Sales Rep**: "Add New Lead Opportunity" modal fetches active workspace members dynamically via `GET /api/users`, eliminating static reps like "Alex Morgan" and linking leads directly to real team members.
 - **Dynamic Owner Filter**: The Kanban board filters opportunities dynamically by team member owners fetched from the database.
+- **Dynamic Country & Location Tracking**: Integrated Country text field across "Add New Lead Opportunity" and "Edit Lead" drawer, bound to form states and stored in `Lead.country` with zero hardcoded defaults.
 - **Automatic Client Conversion**: Moving a lead to `Won / Closed` automatically creates a corresponding enterprise `Client` record (or updates existing client lifetime value) and archives the won deal.
 - **Deal Value Aggregation**: Tracks estimated values, priority tags, and stage metrics dynamically.
 
 ### 💼 5. Client Directory & Dynamic Metrics
 - **Dynamic Client Aggregation**: `GET /api/clients` dynamically aggregates each client's open `dealCount` and issued `invoiceCount` via MongoDB count queries.
 - **Lifetime Value Tracking**: Accurately tracks accumulated client revenue and historical conversion timestamps.
+- **Dynamic Country & Location Profiles**: "Add Client" and "Edit Client" modals support dynamic Country fields, pre-filling existing data on edit and persisting to MongoDB without hardcoded location fallbacks (removed static "United States" and "USA").
+- **Real-Time Client Ledger & Audit Trail**: The "Client Ledger & Account History" drawer fetches live historical transactions (`GET /api/clients/:id/history`), displaying actual invoice generation and settlement dates alongside deal conversion milestones instead of static dummy events.
 
 ### 🧾 6. Invoices & Billing Hub (Dynamic & Persistent)
 - **Zero Mock Data**: Fully database-driven invoicing system with MongoDB persistence.
@@ -55,7 +59,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - **SETTLED & PAID**: Total value of invoices with `Paid` status.
   - **PENDING PAYMENT**: Outstanding balance for invoices with `Pending` status.
   - **OVERDUE BALANCE**: Arrears balance for invoices past due (`Overdue` status).
-- **Itemized Invoice Generator**: Dynamic line items, automatic subtotal calculation, configurable discount and tax rates, and auto-generated sequential invoice numbers (`INV-YYYY-XXX`).
+- **Itemized Invoice Generator**: Dynamic line items, automatic subtotal calculation, configurable discount and tax rates, auto-generated sequential invoice numbers (`INV-YYYY-XXX`), and dynamic 30-day default due date calculation.
 - **Instant Status Progression**: One-click checkmark action marks invoices as `Paid` via `PUT /api/invoices/:id/status`, immediately updating local state and recalculating KPI widgets without a page reload.
 - **Printable Template**: Pixel-perfect invoice modal ready for browser print and PDF export.
 
@@ -84,6 +88,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Revenue Performance & Targets (Recharts)**: Interactive responsive `<LineChart>` comparing monthly billed actual revenue against quota targets with custom currency tooltips.
 - **Leads by Pipeline Stage**: Aggregates active deals by stage with deal counts, estimated values, percentage yields, and total pipeline valuation (`totalPipelineValue`).
 - **Recent Activities Feed**: Aggregates the latest cross-entity records across Leads, Invoices, and Clients, sorted chronologically with category filtering (`all`, `deal`, `invoice`, `lead`, `client`).
+- **Dynamic Timeframe CSV Data Export**: "Export" button triggers `GET /api/dashboard/export?timeframe=...`, streaming a structured CSV report containing settled Invoices and converted Leads filtered dynamically by selected timeframes ("Last 7 Days", "This Month", "This Quarter", "Year to Date") with strict tenant isolation.
 - **Standard USD Currency Formatting**: Formats all monetary values uniformly (e.g., `$1,057,000`).
 
 ### 🛡️ 10. Role-Based Registration & Tenant Provisioning
@@ -137,7 +142,8 @@ CRM/
 │   │   │   └── userController.ts   # Profile updates, password modification, team members
 │   │   ├── middleware/
 │   │   │   ├── authMiddleware.ts   # JWT verification, tenant isolation guard, RBAC
-│   │   │   └── errorMiddleware.ts  # Centralized error handler
+│   │   │   ├── errorMiddleware.ts  # Centralized error handler
+│   │   │   └── uploadMiddleware.ts # Multer Cloudinary storage for profile pictures
 │   │   ├── models/
 │   │   │   ├── Client.ts           # Enterprise client schema with lifetime value
 │   │   │   ├── Invitation.ts       # Tokenized workspace invitation schema
@@ -160,7 +166,8 @@ CRM/
 │   │   ├── types/
 │   │   │   └── index.ts            # Global backend TypeScript interfaces
 │   │   ├── utils/
-│   │   │   └── emailService.ts     # Nodemailer HTML template and email dispatch
+│   │   │   ├── emailService.ts     # Nodemailer HTML template and email dispatch
+│   │   │   └── tenantHelper.ts     # Tenant context resolution & validation helper
 │   │   └── server.ts               # Express application entrypoint
 │   ├── package.json
 │   ├── tsconfig.json
@@ -171,7 +178,7 @@ CRM/
     │   ├── components/
     │   │   ├── common/             # Modals, badges, buttons, spinners
     │   │   ├── layout/
-    │   │   │   ├── Header.tsx      # Top bar with user dropdown and notifications
+    │   │   │   ├── Navbar.tsx      # Top bar with user dropdown and notifications
     │   │   │   ├── ShellLayout.tsx # Main authenticated dashboard shell
     │   │   │   └── Sidebar.tsx     # Navigation & dynamic "Seats in use" widget
     │   │   └── profile/
@@ -189,6 +196,7 @@ CRM/
     │   │   ├── Dashboard.tsx       # Executive analytics, KPI metrics, pipeline highlights
     │   │   ├── Invoices.tsx        # Dynamic billing ledger, live KPI widgets, generator
     │   │   ├── LeadsPipeline.tsx   # Kanban deals with auto-conversion to Clients
+    │   │   ├── PendingInviteScreen.tsx # Employee waiting room awaiting workspace invitation
     │   │   └── Settings.tsx        # Tenant governance, team table & seat management
     │   ├── routes/
     │   │   ├── AppRoutes.tsx       # Application routing tree
@@ -329,25 +337,24 @@ cd Elevate-B2B-CRM
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/leads` | Private | Fetch all leads for current tenant |
-| `POST` | `/api/leads` | Private | Create a new lead opportunity with dynamically resolved assigned sales rep |
-| `PUT` | `/api/leads/:id` | Private | Update lead terms or stage (auto-converts to Client upon 'Won / Closed') |
-| `PATCH` | `/api/leads/:id/stage` | Private | Update lead stage (auto-converts to Client upon 'Won / Closed') |
+| `POST` | `/api/leads` | Private | Create a new lead opportunity with dynamically resolved assigned sales rep and country |
+| `PUT` | `/api/leads/:id` | Private | Update lead details, country, or stage (auto-converts to Client upon 'Won / Closed') |
 | `DELETE` | `/api/leads/:id` | Private | Delete a lead with strict tenant verification |
 
 ### 💼 Clients (`/api/clients`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/clients` | Private | Fetch all clients with dynamic `invoiceCount` & `dealCount` |
-| `POST` | `/api/clients` | Private | Create a new enterprise client |
-| `GET` | `/api/clients/:id` | Private | Fetch single client details |
-| `PUT` | `/api/clients/:id` | Private | Update client information |
+| `GET` | `/api/clients/:id/history` | Private | Fetch real transaction history & audit trail for a specific client |
+| `POST` | `/api/clients` | Private | Create a new enterprise client with dynamic location tracking |
+| `PUT` | `/api/clients/:id` | Private | Update client information, status, and country |
 | `DELETE` | `/api/clients/:id` | Private | Delete client record |
 
 ### 🧾 Invoices & Billing (`/api/invoices`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/invoices` | Private | Fetch all invoices populated with client details |
-| `POST` | `/api/invoices` | Private | Create a new itemized electronic invoice |
+| `POST` | `/api/invoices` | Private | Create a new itemized electronic invoice with dynamic 30-day due date |
 | `PUT` | `/api/invoices/:id/status` | Private | Update invoice status (`Paid`, `Pending`, `Overdue`) |
 | `DELETE` | `/api/invoices/:id` | Private | Delete invoice with tenant isolation verification |
 
@@ -359,6 +366,9 @@ cd Elevate-B2B-CRM
 | `PUT` | `/api/users/profile` | Private | Update user details, phone, and department |
 | `PUT` | `/api/users/change-password` | Private | Update account password with old password verification |
 | `POST` | `/api/users/avatar` | Private | Upload user profile picture to Cloudinary |
+| `POST` | `/api/users/forgot-password` | Public | Request 6-digit password recovery OTP via email |
+| `POST` | `/api/users/verify-otp` | Public | Verify 6-digit recovery OTP validity and expiration |
+| `POST` | `/api/users/reset-password` | Public | Reset password using verified recovery OTP |
 
 ---
 
