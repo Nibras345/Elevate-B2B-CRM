@@ -12,6 +12,7 @@ export interface ILead extends Document {
   priority: LeadPriority;
   email: string;
   phone?: string;
+  country?: string;
   notes?: string;
   stage: LeadStage;
   tags?: string[];
@@ -67,6 +68,11 @@ const LeadSchema: Schema<ILead> = new Schema(
       index: true,
     },
     phone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    country: {
       type: String,
       default: '',
       trim: true,

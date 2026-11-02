@@ -25,6 +25,7 @@ const formatLeadResponse = (lead: any) => ({
   priority: lead.priority,
   email: lead.email,
   phone: lead.phone || '',
+  country: lead.country || '',
   notes: lead.notes || '',
   stage: lead.stage,
   tags: lead.tags || [],
@@ -89,6 +90,7 @@ export const createLead = async (
       priority,
       email,
       phone,
+      country,
       notes,
       stage,
       tags,
@@ -155,6 +157,7 @@ export const createLead = async (
       priority: (priority as LeadPriority) || 'Medium',
       email: chosenEmail,
       phone: phone?.trim() || '',
+      country: country?.trim() || '',
       notes: notes || '',
       stage: normalizedStage,
       tags: Array.isArray(tags) ? tags : typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()).filter(Boolean) : ['Enterprise'],
@@ -179,6 +182,7 @@ export const createLead = async (
           companyName: chosenCompanyName,
           email: chosenEmail,
           phone: phone?.trim() || '',
+          country: country?.trim() || '',
           lifetimeValue: chosenValue,
           convertedAt: new Date(),
           status: 'Active',
@@ -245,6 +249,7 @@ export const updateLead = async (
       priority,
       email,
       phone,
+      country,
       notes,
       stage,
       tags,
@@ -257,6 +262,7 @@ export const updateLead = async (
     if (companyName || company) lead.companyName = (companyName || company).trim();
     if (email) lead.email = email.toLowerCase().trim();
     if (phone !== undefined) lead.phone = phone.trim();
+    if (country !== undefined) lead.country = country.trim();
     if (notes !== undefined) lead.notes = notes;
     if (priority) lead.priority = priority as LeadPriority;
     if (estimatedValue !== undefined || value !== undefined) {
@@ -313,6 +319,7 @@ export const updateLead = async (
           companyName: lead.companyName,
           email: lead.email,
           phone: lead.phone || '',
+          country: lead.country || '',
           lifetimeValue: lead.estimatedValue || 0,
           convertedAt: new Date(),
           status: 'Active',

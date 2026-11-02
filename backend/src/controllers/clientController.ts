@@ -31,9 +31,9 @@ const formatClientResponse = (client: any) => ({
   company: client.companyName,
   ltv: client.lifetimeValue || 0,
   status: client.status || 'Active',
-  industry: client.industry || 'Enterprise Software',
-  city: client.city || 'San Francisco',
-  country: client.country || 'United States',
+  industry: client.industry || '',
+  city: client.city || '',
+  country: client.country || '',
   lastContacted: client.lastContacted || 'Active Relationship',
   createdAt: client.createdAt,
   updatedAt: client.updatedAt,
@@ -161,7 +161,7 @@ export const createClient = async (
       status: status || 'Active',
       industry: industry || 'Enterprise Software',
       city: city || '',
-      country: country || 'United States',
+      country: country?.trim() || '',
     });
 
     res.status(201).json({
@@ -229,8 +229,8 @@ export const updateClient = async (
     }
     if (status) client.status = status;
     if (industry) client.industry = industry;
-    if (city !== undefined) client.city = city;
-    if (country !== undefined) client.country = country;
+    if (city !== undefined) client.city = city?.trim?.() ?? city;
+    if (country !== undefined) client.country = country?.trim?.() ?? country;
 
     await client.save();
 

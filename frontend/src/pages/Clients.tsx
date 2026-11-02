@@ -206,6 +206,10 @@ export const Clients: React.FC = () => {
           phone: newClientForm.phone,
           lifetimeValue: Number(newClientForm.ltv) || 0,
           status: newClientForm.status,
+          country: newClientForm.country || '',
+          industry: newClientForm.industry,
+          address: newClientForm.address,
+          city: newClientForm.city,
         },
         {
           headers: {
@@ -229,7 +233,7 @@ export const Clients: React.FC = () => {
           industry: 'Enterprise Software',
           address: '',
           city: '',
-          country: 'United States',
+          country: '',
         });
         setFormErrors({});
         notify(
@@ -264,6 +268,7 @@ export const Clients: React.FC = () => {
           phone: clientToEdit.phone,
           lifetimeValue: Number(clientToEdit.lifetimeValue ?? clientToEdit.ltv) || 0,
           status: clientToEdit.status,
+          country: clientToEdit.country || '',
         },
         {
           headers: {
@@ -320,7 +325,7 @@ export const Clients: React.FC = () => {
   };
 
   const openEditModal = (client: Client) => {
-    setClientToEdit({ ...client });
+    setClientToEdit({ ...client, country: client.country || '' });
     setIsEditModalOpen(true);
   };
 
@@ -486,7 +491,7 @@ export const Clients: React.FC = () => {
                               {contactName}
                             </span>
                             <span className="text-[11px] text-slate-400 block">
-                              {client.city || 'Global'}, {client.country || 'USA'}
+                              {[client.city, client.country].filter(Boolean).join(', ') || 'Global'}
                             </span>
                           </div>
                         </div>
@@ -798,6 +803,7 @@ export const Clients: React.FC = () => {
               </label>
               <input
                 type="text"
+                placeholder="e.g. Australia, Pakistan"
                 value={newClientForm.country}
                 onChange={(e) => setNewClientForm({ ...newClientForm, country: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
@@ -1062,6 +1068,19 @@ export const Clients: React.FC = () => {
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Country
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Australia, Pakistan"
+                value={clientToEdit.country || ''}
+                onChange={(e) => setClientToEdit({ ...clientToEdit, country: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+              />
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">

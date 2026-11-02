@@ -80,6 +80,7 @@ const ClientSchema: Schema<IClient> = new Schema(
     country: {
       type: String,
       default: '',
+      trim: true,
     },
     openDealsCount: {
       type: Number,

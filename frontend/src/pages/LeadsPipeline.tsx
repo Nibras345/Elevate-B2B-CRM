@@ -53,6 +53,7 @@ export const LeadsPipeline: React.FC = () => {
     company: '',
     email: '',
     phone: '',
+    country: '',
     value: '',
     priority: 'High' as Priority,
     stage: 'New Lead' as PipelineStage,
@@ -240,6 +241,7 @@ export const LeadsPipeline: React.FC = () => {
           stage: selectedLead.stage,
           email: selectedLead.email,
           phone: selectedLead.phone,
+          country: selectedLead.country || '',
           notes: selectedLead.notes,
           tags: selectedLead.tags,
         },
@@ -315,6 +317,7 @@ export const LeadsPipeline: React.FC = () => {
           companyName: newLeadForm.company,
           email: newLeadForm.email,
           phone: newLeadForm.phone,
+          country: newLeadForm.country,
           estimatedValue: Number(newLeadForm.value) || 0,
           priority: newLeadForm.priority,
           stage: newLeadForm.stage,
@@ -339,6 +342,7 @@ export const LeadsPipeline: React.FC = () => {
           company: '',
           email: '',
           phone: '',
+          country: '',
           value: '',
           priority: 'High',
           stage: 'New Lead',
@@ -739,6 +743,20 @@ export const LeadsPipeline: React.FC = () => {
               </div>
             </div>
 
+            {/* Country */}
+            <div>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Country
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Australia, Pakistan"
+                value={selectedLead.country || ''}
+                onChange={(e) => setSelectedLead({ ...selectedLead, country: e.target.value })}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+              />
+            </div>
+
             {/* Notes */}
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -929,6 +947,19 @@ export const LeadsPipeline: React.FC = () => {
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Country
+            </label>
+            <input
+              type="text"
+              value={newLeadForm.country}
+              onChange={(e) => setNewLeadForm({ ...newLeadForm, country: e.target.value })}
+              placeholder="e.g. Australia, Pakistan"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+            />
           </div>
 
           <div>

@@ -23,6 +23,7 @@ export interface Lead {
   companyName?: string;
   email: string;
   phone: string;
+  country?: string;
   value: number;
   estimatedValue?: number;
   priority: Priority;
