@@ -3,6 +3,7 @@ import mongoose, { Document, Schema, Model, Types } from 'mongoose';
 export interface IClient extends Document {
   tenantId: Types.ObjectId;
   tenantCode?: string;
+  createdBy?: Types.ObjectId;
   contactName: string;
   companyName: string;
   email: string;
@@ -30,6 +31,12 @@ const ClientSchema: Schema<IClient> = new Schema(
     },
     tenantCode: {
       type: String,
+      index: true,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: false,
       index: true,
     },
     contactName: {

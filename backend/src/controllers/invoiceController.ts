@@ -122,6 +122,16 @@ export const updateInvoiceStatus = async (
       return;
     }
 
+    // Record-Level Ownership check: Company Admin can edit ANY; Employee can only edit own
+    if (
+      req.user?.role !== 'Company Admin' &&
+      req.user?.role !== 'Super Admin' &&
+      invoice.createdBy?.toString() !== req.user?._id?.toString()
+    ) {
+      res.status(403).json({ success: false, message: "Unauthorized. You can only modify your own records." });
+      return;
+    }
+
     invoice.status = status;
     await invoice.save();
 
@@ -159,13 +169,13 @@ export const deleteInvoice = async (
       return;
     }
 
-    // Strict tenant isolation: delete only if tenantId matches
-    const deleted = await Invoice.findOneAndDelete({
+    // Strict tenant isolation: fetch invoice first
+    const invoice = await Invoice.findOne({
       _id: id,
       tenantId: tenantObjectId,
     });
 
-    if (!deleted) {
+    if (!invoice) {
       res.status(404).json({
         success: false,
         message: 'Invoice not found or unauthorized',
@@ -173,9 +183,21 @@ export const deleteInvoice = async (
       return;
     }
 
+    // Record-Level Ownership check: Company Admin can delete ANY; Employee can only delete own
+    if (
+      req.user?.role !== 'Company Admin' &&
+      req.user?.role !== 'Super Admin' &&
+      invoice.createdBy?.toString() !== req.user?._id?.toString()
+    ) {
+      res.status(403).json({ success: false, message: "Unauthorized. You can only modify your own records." });
+      return;
+    }
+
+    await Invoice.findByIdAndDelete(invoice._id);
+
     res.status(200).json({
       success: true,
-      message: `Invoice ${deleted.invoiceNumber} deleted successfully`,
+      message: `Invoice ${invoice.invoiceNumber} deleted successfully`,
     });
   } catch (error) {
     next(error);
@@ -194,6 +216,8 @@ export const createInvoice = async (
 ): Promise<void> => {
   try {
     const { tenantObjectId } = await getTenantContext(req);
+    req.body.createdBy = req.user?._id;
+
     const {
       clientId,
       clientName,
@@ -242,6 +266,7 @@ export const createInvoice = async (
     const newInvoice = await Invoice.create({
       tenantId: tenantObjectId,
       clientId: mongoose.Types.ObjectId.isValid(clientId) ? new mongoose.Types.ObjectId(clientId) : clientId,
+      createdBy: req.body.createdBy || req.user?._id,
       clientName: finalClientName || '',
       company: finalCompany || '',
       email: finalEmail || '',

@@ -6,6 +6,7 @@ export type LeadPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 export interface ILead extends Document {
   tenantId: Types.ObjectId;
   tenantCode?: string;
+  createdBy?: Types.ObjectId;
   contactName: string;
   companyName: string;
   estimatedValue: number;
@@ -17,6 +18,7 @@ export interface ILead extends Document {
   stage: LeadStage;
   tags?: string[];
   assignedTo?: {
+    id?: string;
     name: string;
     avatar?: string;
     role?: string;
@@ -37,6 +39,12 @@ const LeadSchema: Schema<ILead> = new Schema(
     },
     tenantCode: {
       type: String,
+      index: true,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: false,
       index: true,
     },
     contactName: {

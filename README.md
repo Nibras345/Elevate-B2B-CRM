@@ -384,6 +384,7 @@ cd Elevate-B2B-CRM
 2. **Tenant Boundary Enforcement (`tenantGuard`)**: Queries are restricted to the calling tenant's workspace using compound filters (`{ tenantId: tenantObjectId }`).
 3. **Role Validation (`authorizeRoles`)**: Critical operations (inviting teammates, cancelling invites, modifying organization settings) are strictly restricted to `Company Admin` and `Super Admin`.
 4. **Self-Deletion Prevention**: Administrators cannot delete or detach their own active workspace account from the team governance interface.
+5. **Record-Level Ownership Enforcement**: Schemas for `Lead`, `Client`, and `Invoice` require a `createdBy` reference to `User`. Company Admins can edit or delete any record in their workspace, while standard Employees can only modify or delete records they personally created (or are assigned to), returning `403 Forbidden` if unauthorized.
 
 ---
 

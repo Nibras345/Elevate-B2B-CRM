@@ -18,6 +18,7 @@ const formatLeadResponse = (lead: any) => ({
   contactName: lead.contactName,
   companyName: lead.companyName,
   estimatedValue: lead.estimatedValue,
+  createdBy: lead.createdBy,
   // Frontend Compatibility Aliases
   name: lead.contactName,
   company: lead.companyName,
@@ -96,6 +97,7 @@ export const createLead = async (
 ): Promise<void> => {
   try {
     const { tenantObjectId, tenantCode } = await getTenantContext(req);
+    req.body.createdBy = req.user?._id;
     const {
       contactName,
       name,
@@ -167,6 +169,7 @@ export const createLead = async (
     const newLead = await Lead.create({
       tenantId: tenantObjectId,
       tenantCode,
+      createdBy: req.body.createdBy || req.user?._id,
       contactName: chosenContactName,
       companyName: chosenCompanyName,
       estimatedValue: chosenValue,
@@ -194,6 +197,7 @@ export const createLead = async (
         autoConvertedClient = await Client.create({
           tenantId: tenantObjectId,
           tenantCode,
+          createdBy: req.body.createdBy || req.user?._id,
           contactName: chosenContactName,
           companyName: chosenCompanyName,
           email: chosenEmail,
@@ -251,6 +255,23 @@ export const updateLead = async (
         success: false,
         message: 'Lead opportunity not found in this tenant workspace.',
       });
+      return;
+    }
+
+    // Record-Level Ownership check: Company Admin can edit ANY; Employee can only edit own / assigned
+    const isAssignedToUser = Boolean(
+      lead.assignedTo?.id &&
+      req.user?._id &&
+      lead.assignedTo.id.toString() === req.user._id.toString()
+    );
+
+    if (
+      req.user?.role !== 'Company Admin' &&
+      req.user?.role !== 'Super Admin' &&
+      !isAssignedToUser &&
+      lead.createdBy?.toString() !== req.user?._id?.toString()
+    ) {
+      res.status(403).json({ success: false, message: "Unauthorized. You can only modify your own records." });
       return;
     }
 
@@ -331,6 +352,7 @@ export const updateLead = async (
         autoConvertedClient = await Client.create({
           tenantId: tenantObjectId,
           tenantCode,
+          createdBy: (lead as any).createdBy || req.user?._id,
           contactName: lead.contactName,
           companyName: lead.companyName,
           email: lead.email,
@@ -386,12 +408,12 @@ export const deleteLead = async (
       return;
     }
 
-    const deletedLead = await Lead.findOneAndDelete({
+    const lead = await Lead.findOne({
       _id: id,
       tenantId: tenantObjectId,
     });
 
-    if (!deletedLead) {
+    if (!lead) {
       res.status(404).json({
         success: false,
         message: 'Lead opportunity not found in this tenant workspace.',
@@ -399,9 +421,28 @@ export const deleteLead = async (
       return;
     }
 
+    // Record-Level Ownership check: Company Admin can delete ANY; Employee can only delete own / assigned
+    const isAssignedToUser = Boolean(
+      lead.assignedTo?.id &&
+      req.user?._id &&
+      lead.assignedTo.id.toString() === req.user._id.toString()
+    );
+
+    if (
+      req.user?.role !== 'Company Admin' &&
+      req.user?.role !== 'Super Admin' &&
+      !isAssignedToUser &&
+      lead.createdBy?.toString() !== req.user?._id?.toString()
+    ) {
+      res.status(403).json({ success: false, message: "Unauthorized. You can only modify your own records." });
+      return;
+    }
+
+    await Lead.findByIdAndDelete(lead._id);
+
     res.status(200).json({
       success: true,
-      message: `Lead for '${deletedLead.companyName}' has been removed from the pipeline.`,
+      message: `Lead for '${lead.companyName}' has been removed from the pipeline.`,
     });
   } catch (error: any) {
     next(error);

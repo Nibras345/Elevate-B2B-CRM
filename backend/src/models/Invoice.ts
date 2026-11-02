@@ -10,6 +10,7 @@ export interface IInvoiceItem {
 export interface IInvoice extends Document {
   tenantId: mongoose.Types.ObjectId;
   clientId: mongoose.Types.ObjectId | any;
+  createdBy?: mongoose.Types.ObjectId;
   clientName?: string;
   company?: string;
   email?: string;
@@ -51,6 +52,12 @@ const InvoiceSchema = new Schema<IInvoice>(
       type: Schema.Types.ObjectId,
       ref: 'Client',
       required: true,
+      index: true,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: false,
       index: true,
     },
     clientName: {

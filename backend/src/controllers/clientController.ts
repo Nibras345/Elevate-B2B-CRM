@@ -18,6 +18,7 @@ const formatClientResponse = (client: any) => ({
   contactName: client.contactName,
   companyName: client.companyName,
   email: client.email,
+  createdBy: client.createdBy,
   phone: client.phone || '',
   lifetimeValue: client.lifetimeValue || 0,
   convertedAt: client.convertedAt || client.createdAt,
@@ -136,6 +137,8 @@ export const createClient = async (
 ): Promise<void> => {
   try {
     const { tenantObjectId, tenantCode } = await getTenantContext(req);
+    req.body.createdBy = req.user?._id;
+
     const {
       contactName,
       name,
@@ -167,6 +170,7 @@ export const createClient = async (
     const newClient = await Client.create({
       tenantId: tenantObjectId,
       tenantCode,
+      createdBy: req.body.createdBy || req.user?._id,
       contactName: chosenContact,
       companyName: chosenCompany,
       email: chosenEmail,
@@ -217,6 +221,16 @@ export const updateClient = async (
         success: false,
         message: 'Client not found in this tenant workspace.',
       });
+      return;
+    }
+
+    // Record-Level Ownership check: Company Admin can edit ANY; Employee can only edit own
+    if (
+      req.user?.role !== 'Company Admin' &&
+      req.user?.role !== 'Super Admin' &&
+      client.createdBy?.toString() !== req.user?._id?.toString()
+    ) {
+      res.status(403).json({ success: false, message: "Unauthorized. You can only modify your own records." });
       return;
     }
 
@@ -281,8 +295,8 @@ export const deleteClient = async (
       return;
     }
 
-    const deletedClient = await Client.findOneAndDelete({ _id: id, tenantId: tenantObjectId });
-    if (!deletedClient) {
+    const client = await Client.findOne({ _id: id, tenantId: tenantObjectId });
+    if (!client) {
       res.status(404).json({
         success: false,
         message: 'Client not found in this tenant workspace.',
@@ -290,9 +304,21 @@ export const deleteClient = async (
       return;
     }
 
+    // Record-Level Ownership check: Company Admin can delete ANY; Employee can only delete own
+    if (
+      req.user?.role !== 'Company Admin' &&
+      req.user?.role !== 'Super Admin' &&
+      client.createdBy?.toString() !== req.user?._id?.toString()
+    ) {
+      res.status(403).json({ success: false, message: "Unauthorized. You can only modify your own records." });
+      return;
+    }
+
+    await Client.findByIdAndDelete(client._id);
+
     res.status(200).json({
       success: true,
-      message: `Client '${deletedClient.companyName}' has been removed.`,
+      message: `Client '${client.companyName}' has been removed.`,
     });
   } catch (error: any) {
     next(error);
