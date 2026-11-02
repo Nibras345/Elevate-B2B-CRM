@@ -33,7 +33,8 @@ export const Clients: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortBy, setSortBy] = useState('ltv-desc'); // ltv-desc, ltv-asc, name-asc
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalClients, setTotalClients] = useState(0);
 
   // Add Client Drawer
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
@@ -75,19 +76,25 @@ export const Clients: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Route 2: GET /api/clients - Strict tenant isolation
+  // Route 2: GET /api/clients - Strict tenant isolation with server-side pagination
   const fetchClients = async () => {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.get('/api/clients', {
+        params: { page: currentPage, limit: 10 },
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (response.data.success && Array.isArray(response.data.clients)) {
-        setClients(response.data.clients);
+      if (response.data.success) {
+        const clientData = response.data.data || response.data.clients || [];
+        setClients(clientData);
+        if (response.data.pagination) {
+          setTotalPages(response.data.pagination.pages || 1);
+          setTotalClients(response.data.pagination.total || 0);
+        }
       }
     } catch (err: any) {
       console.error('[Fetch Clients Error]:', err);
@@ -99,7 +106,7 @@ export const Clients: React.FC = () => {
 
   useEffect(() => {
     fetchClients();
-  }, [user?.tenantId]);
+  }, [user?.tenantId, currentPage]);
 
   // Dynamic Client History Fetch
   useEffect(() => {
@@ -167,12 +174,8 @@ export const Clients: React.FC = () => {
       return 0;
     });
 
-  // Pagination
-  const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
-  const paginatedClients = filteredClients.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Server-side paginated clients to display
+  const paginatedClients = filteredClients;
 
   // Validation
   const validateForm = () => {
@@ -222,6 +225,7 @@ export const Clients: React.FC = () => {
       if (response.data.success) {
         const createdClient = response.data.client;
         setClients((prev) => [createdClient, ...prev]);
+        setTotalClients((prev) => prev + 1);
         setIsAddDrawerOpen(false);
         setNewClientForm({
           name: '',
@@ -311,6 +315,7 @@ export const Clients: React.FC = () => {
 
       if (response.data.success) {
         setClients((prev) => prev.filter((c) => (c.id || (c as any)._id) !== clientId));
+        setTotalClients((prev) => Math.max(0, prev - 1));
         notify(response.data.message || `Deleted client record for ${companyName}`, 'info');
       }
     } catch (err: any) {
@@ -621,39 +626,31 @@ export const Clients: React.FC = () => {
         {/* Pagination Bar */}
         <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/30">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Showing <strong className="text-slate-900 dark:text-white">{Math.min((currentPage - 1) * itemsPerPage + 1, filteredClients.length)}</strong> to{' '}
-            <strong className="text-slate-900 dark:text-white">{Math.min(currentPage * itemsPerPage, filteredClients.length)}</strong> of{' '}
-            <strong className="text-slate-900 dark:text-white">{filteredClients.length}</strong> clients
+            Showing <strong className="text-slate-900 dark:text-white">{totalClients > 0 ? (currentPage - 1) * 10 + 1 : 0}</strong> to{' '}
+            <strong className="text-slate-900 dark:text-white">{Math.min(currentPage * 10, totalClients)}</strong> of{' '}
+            <strong className="text-slate-900 dark:text-white">{totalClients}</strong> clients
           </span>
 
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage <= 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
+              <span>Previous</span>
             </button>
 
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  currentPage === page
-                    ? 'bg-brand-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                {page}
-              </button>
-            ))}
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300 px-2">
+              Page {currentPage} of {totalPages}
+            </span>
 
             <button
-              onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+              onClick={() => setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev))}
+              disabled={currentPage >= totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
             >
+              <span>Next</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

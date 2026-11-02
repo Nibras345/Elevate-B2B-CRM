@@ -43,18 +43,33 @@ export const getInvoices = async (
   try {
     const { tenantObjectId } = await getTenantContext(req);
 
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    const query = { tenantId: tenantObjectId };
+    const total = await Invoice.countDocuments(query);
+
     // Strict multi-tenant query isolation with .populate('clientId', 'contactName companyName')
-    const rawInvoices = await Invoice.find({ tenantId: tenantObjectId })
+    const rawInvoices = await Invoice.find(query)
       .populate('clientId', 'contactName companyName email phone')
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
     const invoices = rawInvoices.map(formatInvoiceResponse);
 
     res.status(200).json({
       success: true,
-      count: invoices.length,
+      data: invoices,
       invoices,
+      count: total,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit) || 1,
+      },
     });
   } catch (error) {
     next(error);

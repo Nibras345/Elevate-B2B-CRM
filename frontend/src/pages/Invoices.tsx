@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   Loader2,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Modal } from '../components/common/Modal';
 import { Badge, BadgeVariant } from '../components/common/Badge';
@@ -23,6 +25,9 @@ export const Invoices: React.FC = () => {
   // STRICT RULE: No static or mock data. Initialize empty and fetch strictly from API.
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState<boolean>(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalInvoices, setTotalInvoices] = useState(0);
   const [searchParams] = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
 
@@ -61,18 +66,20 @@ export const Invoices: React.FC = () => {
           setIsLoadingClients(true);
           const token = localStorage.getItem('nexcrm_jwt_token');
           const response = await axios.get('/api/clients', {
+            params: { limit: 100 },
             headers: {
               Authorization: `Bearer ${token}`,
             },
           });
 
-          if (response.data.success && Array.isArray(response.data.clients)) {
-            setClients(response.data.clients);
+          const clientList = response.data?.data || response.data?.clients || [];
+          if (response.data.success && Array.isArray(clientList)) {
+            setClients(clientList);
             // Handle pre-selected client or default selection
             if (preselectedClientId) {
               setSelectedClientId(preselectedClientId);
-            } else if (!selectedClientId && response.data.clients.length > 0) {
-              const firstClient = response.data.clients[0];
+            } else if (!selectedClientId && clientList.length > 0) {
+              const firstClient = clientList[0];
               setSelectedClientId(firstClient._id || firstClient.id || '');
             }
           }
@@ -96,19 +103,25 @@ export const Invoices: React.FC = () => {
     }
   }, [preselectedClientId]);
 
-  // Route 1: GET /api/invoices - Strict tenant isolation
+  // Route 1: GET /api/invoices - Strict tenant isolation with server-side pagination
   const fetchInvoices = async () => {
     try {
       setIsLoadingInvoices(true);
       const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.get('/api/invoices', {
+        params: { page: currentPage, limit: 10 },
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (response.data.success && Array.isArray(response.data.invoices)) {
-        setInvoices(response.data.invoices);
+      if (response.data.success) {
+        const invoiceData = response.data.data || response.data.invoices || [];
+        setInvoices(invoiceData);
+        if (response.data.pagination) {
+          setTotalPages(response.data.pagination.pages || 1);
+          setTotalInvoices(response.data.pagination.total || 0);
+        }
       }
     } catch (err: any) {
       console.error('[Fetch Invoices Error]:', err);
@@ -120,7 +133,7 @@ export const Invoices: React.FC = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [user?.tenantId]);
+  }, [user?.tenantId, currentPage]);
 
   // Summary Metrics calculations - Dynamically calculated from grandTotal of fetched invoices
   const totalInvoiced = invoices.reduce((acc, curr) => acc + (Number(curr.grandTotal ?? curr.total) || 0), 0);
@@ -222,6 +235,7 @@ export const Invoices: React.FC = () => {
       if (response.data.success && response.data.invoice) {
         const createdInv = response.data.invoice;
         setInvoices(prev => [createdInv, ...prev]);
+        setTotalInvoices(prev => prev + 1);
         setIsGeneratorOpen(false);
         setActiveInvoiceForPreview(createdInv);
         setIsPreviewOpen(true);
@@ -281,6 +295,7 @@ export const Invoices: React.FC = () => {
 
       if (response.data.success) {
         setInvoices(prev => prev.filter(inv => inv.id !== id && (inv as any)._id !== id));
+        setTotalInvoices(prev => Math.max(0, prev - 1));
         if (activeInvoiceForPreview && (activeInvoiceForPreview.id === id || (activeInvoiceForPreview as any)._id === id)) {
           setIsPreviewOpen(false);
           setActiveInvoiceForPreview(null);
@@ -562,6 +577,39 @@ export const Invoices: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/30">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Showing <strong className="text-slate-900 dark:text-white">{totalInvoices > 0 ? (currentPage - 1) * 10 + 1 : 0}</strong> to{' '}
+            <strong className="text-slate-900 dark:text-white">{Math.min(currentPage * 10, totalInvoices)}</strong> of{' '}
+            <strong className="text-slate-900 dark:text-white">{totalInvoices}</strong> invoices
+          </span>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage <= 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Previous</span>
+            </button>
+
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-300 px-2">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev))}
+              disabled={currentPage >= totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 

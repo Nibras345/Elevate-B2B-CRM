@@ -52,9 +52,18 @@ export const getClients = async (
   try {
     const { tenantObjectId } = await getTenantContext(req);
 
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    const query = { tenantId: tenantObjectId };
+    const total = await Client.countDocuments(query);
+
     // Strict multi-tenant query isolation using lean() for performance
-    const clients = await Client.find({ tenantId: tenantObjectId })
+    const clients = await Client.find(query)
       .sort({ convertedAt: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
     // Map each client with dynamic counts using Promise.all
@@ -101,8 +110,14 @@ export const getClients = async (
 
     res.status(200).json({
       success: true,
-      count: clientsWithStats.length,
+      data: clientsWithStats,
       clients: clientsWithStats,
+      count: total,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit) || 1,
+      },
     });
   } catch (error: any) {
     next(error);

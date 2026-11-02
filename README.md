@@ -99,6 +99,11 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Mongoose Role & Tenant Flexibility**: `User` model features explicit role enumeration (`'Company Admin'`, `'Employee'`) with flexible `tenantId` definitions, allowing employees to onboard without initial tenant attachment.
 - **Zero-Error Waiting Room (`PendingInviteScreen`)**: When an employee logs in without an assigned `tenantId`, `ShellLayout` conditionally intercepts rendering before any child components mount (`if (user && !user.tenantId) return <PendingInviteScreen />`). This completely prevents initial dashboard, sidebar, and notification API calls from firing with missing tenant context, guiding the employee to await their administrator's invite.
 
+### ⚡ 11. Scalable Server-Side Pagination & High-Performance Data Streaming
+- **MongoDB Skip/Limit Execution**: High-volume data models (`Leads`, `Clients`, and `Invoices`) utilize server-side `.skip((page - 1) * limit).limit(limit)` queries and `countDocuments()` rather than dumping entire datasets into memory.
+- **Standardized Pagination Payload**: The GET endpoints return metadata alongside records: `{ success: true, data: [...], pagination: { total, page, pages } }` with backward-compatible aliases.
+- **Frontend Pagination Controls**: Fully integrated Previous/Next pagination bars with "Page X of Y" displays across the Leads Pipeline Kanban, Client Directory, and Invoices billing ledger.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -336,7 +341,7 @@ cd Elevate-B2B-CRM
 ### 📈 Leads Pipeline (`/api/leads`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/leads` | Private | Fetch all leads for current tenant |
+| `GET` | `/api/leads` | Private | Fetch paginated leads for current tenant (`?page=1&limit=10`) |
 | `POST` | `/api/leads` | Private | Create a new lead opportunity with dynamically resolved assigned sales rep and country |
 | `PUT` | `/api/leads/:id` | Private | Update lead details, country, or stage (auto-converts to Client upon 'Won / Closed') |
 | `DELETE` | `/api/leads/:id` | Private | Delete a lead with strict tenant verification |
@@ -344,7 +349,7 @@ cd Elevate-B2B-CRM
 ### 💼 Clients (`/api/clients`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/clients` | Private | Fetch all clients with dynamic `invoiceCount` & `dealCount` |
+| `GET` | `/api/clients` | Private | Fetch paginated clients with dynamic `invoiceCount` & `dealCount` (`?page=1&limit=10`) |
 | `GET` | `/api/clients/:id/history` | Private | Fetch real transaction history & audit trail for a specific client |
 | `POST` | `/api/clients` | Private | Create a new enterprise client with dynamic location tracking |
 | `PUT` | `/api/clients/:id` | Private | Update client information, status, and country |
@@ -353,7 +358,7 @@ cd Elevate-B2B-CRM
 ### 🧾 Invoices & Billing (`/api/invoices`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/invoices` | Private | Fetch all invoices populated with client details |
+| `GET` | `/api/invoices` | Private | Fetch paginated invoices populated with client details (`?page=1&limit=10`) |
 | `POST` | `/api/invoices` | Private | Create a new itemized electronic invoice with dynamic 30-day due date |
 | `PUT` | `/api/invoices/:id/status` | Private | Update invoice status (`Paid`, `Pending`, `Overdue`) |
 | `DELETE` | `/api/invoices/:id` | Private | Delete invoice with tenant isolation verification |

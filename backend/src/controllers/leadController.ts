@@ -53,15 +53,31 @@ export const getLeads = async (
   try {
     const { tenantObjectId } = await getTenantContext(req);
 
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    const query = { tenantId: tenantObjectId };
+    const total = await Lead.countDocuments(query);
+
     // Strict multi-tenant query isolation
-    const leads = await Lead.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 });
+    const leads = await Lead.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const formattedLeads = leads.map(formatLeadResponse);
 
     res.status(200).json({
       success: true,
-      count: formattedLeads.length,
+      data: formattedLeads,
       leads: formattedLeads,
+      count: total,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit) || 1,
+      },
     });
   } catch (error: any) {
     next(error);

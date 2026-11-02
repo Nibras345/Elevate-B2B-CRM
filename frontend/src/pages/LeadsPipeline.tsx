@@ -8,6 +8,8 @@ import {
   Trash2,
   Loader2,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Drawer } from '../components/common/Drawer';
 import { Modal } from '../components/common/Modal';
@@ -38,6 +40,9 @@ export const LeadsPipeline: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalLeads, setTotalLeads] = useState(0);
 
   // Dynamic team members for Assigned Sales Rep dropdown
   const [teamMembers, setTeamMembers] = useState<{ _id: string; name: string; role: string }[]>([]);
@@ -99,19 +104,25 @@ export const LeadsPipeline: React.FC = () => {
     fetchTeamMembers();
   }, [user?.tenantId, isAddModalOpen]);
 
-  // Route 1: GET /api/leads - Strict tenant isolation
+  // Route 1: GET /api/leads - Strict tenant isolation with server-side pagination
   const fetchLeads = async () => {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.get('/api/leads', {
+        params: { page: currentPage, limit: 10 },
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (response.data.success && Array.isArray(response.data.leads)) {
-        setLeads(response.data.leads);
+      if (response.data.success) {
+        const leadData = response.data.data || response.data.leads || [];
+        setLeads(leadData);
+        if (response.data.pagination) {
+          setTotalPages(response.data.pagination.pages || 1);
+          setTotalLeads(response.data.pagination.total || 0);
+        }
       }
     } catch (err: any) {
       console.error('[Fetch Leads Error]:', err);
@@ -123,7 +134,7 @@ export const LeadsPipeline: React.FC = () => {
 
   useEffect(() => {
     fetchLeads();
-  }, [user?.tenantId]);
+  }, [user?.tenantId, currentPage]);
 
   // Filter leads
   const filteredLeads = leads.filter((lead) => {
@@ -294,6 +305,7 @@ export const LeadsPipeline: React.FC = () => {
 
       if (response.data.success) {
         setLeads((prev) => prev.filter((l) => (l.id || l._id) !== leadId));
+        setTotalLeads((prev) => Math.max(0, prev - 1));
         setIsDrawerOpen(false);
         notify(response.data.message || 'Lead removed from sales pipeline', 'info');
         window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
@@ -336,6 +348,7 @@ export const LeadsPipeline: React.FC = () => {
       if (response.data.success) {
         const createdLead = response.data.lead;
         setLeads((prev) => [createdLead, ...prev]);
+        setTotalLeads((prev) => prev + 1);
         setIsAddModalOpen(false);
         setNewLeadForm({
           name: '',
@@ -621,6 +634,40 @@ export const LeadsPipeline: React.FC = () => {
             </div>
           );
         })}
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="bg-white dark:bg-slate-900 px-6 py-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          Showing page <strong className="text-slate-900 dark:text-white">{currentPage}</strong> of{' '}
+          <strong className="text-slate-900 dark:text-white">{totalPages}</strong> ({totalLeads} total leads)
+        </span>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage <= 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Previous</span>
+          </button>
+
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300 px-2">
+            Page {currentPage} of {totalPages}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => (prev < totalPages ? prev + 1 : prev))}
+            disabled={currentPage >= totalPages}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+          >
+            <span>Next</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Slide-over Drawer UI: View / Edit Lead */}
