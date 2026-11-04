@@ -33,13 +33,19 @@ export const Settings: React.FC = () => {
   const { user, tenantSettings, updateProfile, updateTenant } = useAuth();
   const { notify } = useNotification();
 
-  // Keep tab in sync with URL
+  const currentUser = user;
+  const isAdmin = currentUser?.role === 'Company Admin' || (currentUser?.role as string) === 'Super Admin';
+
+  // Keep tab in sync with URL & prevent regular employees from accessing Company Settings
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab) {
+    if (tab === 'company' && !isAdmin) {
+      setActiveTab('profile');
+      setSearchParams({ tab: 'profile' });
+    } else if (tab) {
       setActiveTab(tab);
     }
-  }, [searchParams]);
+  }, [searchParams, isAdmin, setSearchParams]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -99,9 +105,6 @@ export const Settings: React.FC = () => {
     newLeadAssigned: true,
     weeklyReport: false,
   });
-
-  const currentUser = user;
-  const isAdmin = user?.role === 'Company Admin' || (user?.role as string) === 'Super Admin';
 
   // Standard USD formatting function
   const formatCurrency = (val: number | string): string => {
@@ -330,7 +333,7 @@ export const Settings: React.FC = () => {
       <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
         {[
           { id: 'profile', label: 'My Profile', icon: User },
-          { id: 'company', label: 'Company Settings', icon: Building, badge: !isAdmin ? 'Admin Only' : null },
+          ...(isAdmin ? [{ id: 'company', label: 'Company Settings', icon: Building }] : []),
           { id: 'team', label: 'Team Members', icon: Users, count: team.length },
           { id: 'security', label: 'Security & Alerts', icon: Shield },
         ].map((tab) => {
@@ -349,11 +352,6 @@ export const Settings: React.FC = () => {
             >
               <Icon className="w-4 h-4" />
               <span>{tab.label}</span>
-              {tab.badge && (
-                <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded text-[10px] font-bold">
-                  {tab.badge}
-                </span>
-              )}
               {tab.count !== undefined && (
                 <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-800 rounded-full text-[10px]">
                   {tab.count}
@@ -368,24 +366,8 @@ export const Settings: React.FC = () => {
       {activeTab === 'profile' && <ProfileSettings />}
 
       {/* TAB 2: Company Settings (Admin Only) */}
-      {activeTab === 'company' && (
+      {activeTab === 'company' && isAdmin && (
         <div className="space-y-6">
-          {!isAdmin && (
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 flex items-start gap-3">
-              <ShieldAlert className="w-5 h-5 flex-shrink-0 text-amber-600 mt-0.5" />
-              <div>
-                <span className="font-bold text-xs uppercase tracking-wider block">
-                  Admin Privileges Required
-                </span>
-                <p className="text-xs mt-0.5">
-                  You are currently simulating the <strong>Employee</strong> role. Company branding and invoice
-                  preferences can only be modified by a <strong>Company Admin</strong>. You can switch roles using
-                  the user menu in the top right navbar.
-                </p>
-              </div>
-            </div>
-          )}
-
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
@@ -562,31 +544,27 @@ export const Settings: React.FC = () => {
                 />
               </button>
 
-              {currentUser?.role === 'Company Admin' && (
+              {isAdmin && (
                 <div className="relative group">
                   <button
                     type="button"
                     onClick={() => {
-                      if (isSeatLimitReached) {
-                        notify(`Seat limit of ${seatLimit} reached. Upgrade plan required.`, 'error');
+                      if (team.length >= 5 || isSeatLimitReached) {
+                        notify('Seat limit reached. You cannot add more than 5 members.', 'error');
                         return;
                       }
                       setIsInviteModalOpen(true);
                     }}
-                    disabled={members.length >= 5 || isSeatLimitReached}
-                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all ${
-                      members.length >= 5 || isSeatLimitReached
-                        ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border border-slate-300 dark:border-slate-700'
-                        : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20 cursor-pointer'
-                    }`}
-                    title={members.length >= 5 || isSeatLimitReached ? 'Maximum seats reached' : undefined}
+                    disabled={team.length >= 5 || isSeatLimitReached}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brand-600"
+                    title={team.length >= 5 || isSeatLimitReached ? 'Seat limit reached (maximum 5 members)' : undefined}
                   >
                     <Plus className="w-4 h-4" />
-                    <span>+ Invite User</span>
+                    <span>+ Add Member</span>
                   </button>
-                  {(members.length >= 5 || isSeatLimitReached) && (
+                  {(team.length >= 5 || isSeatLimitReached) && (
                     <div className="absolute right-0 top-full mt-2 px-2.5 py-1 bg-slate-900 text-white text-[11px] rounded-md shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none">
-                      Maximum seats reached
+                      Seat limit reached (5 / 5)
                     </div>
                   )}
                 </div>
@@ -671,36 +649,36 @@ export const Settings: React.FC = () => {
                               No Colleagues Found
                             </h4>
                             <p className="text-xs text-slate-400 mt-1">
-                              {currentUser?.role === 'Company Admin'
+                              {isAdmin
                                 ? 'Invite team members to collaborate on deals, pipelines, and invoices.'
                                 : 'No other team members have been added to this workspace yet.'}
                             </p>
                           </div>
-                          {currentUser?.role === 'Company Admin' && (
+                          {isAdmin && (
                             <div className="relative group inline-block">
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (isSeatLimitReached) {
-                                    notify('Seat limit reached. Please upgrade your plan.', 'error');
+                                  if (team.length >= 5 || isSeatLimitReached) {
+                                    notify('Seat limit reached. You cannot add more than 5 members.', 'error');
                                     return;
                                   }
                                   setIsInviteModalOpen(true);
                                 }}
-                                disabled={isSeatLimitReached}
+                                disabled={team.length >= 5 || isSeatLimitReached}
                                 className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all ${
-                                  isSeatLimitReached
+                                  team.length >= 5 || isSeatLimitReached
                                     ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-300 dark:border-slate-700'
                                     : 'text-white bg-brand-600 hover:bg-brand-500 cursor-pointer'
                                 }`}
-                                title={isSeatLimitReached ? 'Seat limit reached. Please upgrade your plan.' : undefined}
+                                title={team.length >= 5 || isSeatLimitReached ? 'Seat limit reached (maximum 5 members)' : undefined}
                               >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span>Invite First Member</span>
+                                <span>+ Add Member</span>
                               </button>
-                              {isSeatLimitReached && (
+                              {(team.length >= 5 || isSeatLimitReached) && (
                                 <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2.5 py-1 bg-slate-900 text-white text-[11px] rounded-md shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none">
-                                  Seat limit reached. Please upgrade your plan.
+                                  Seat limit reached (5 / 5)
                                 </div>
                               )}
                             </div>
@@ -815,12 +793,12 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
-          {/* Invite User Modal - Strictly restricted to Company Admin */}
-          {currentUser?.role === 'Company Admin' && (
+          {/* Invite User Modal - Restricted to Admin */}
+          {isAdmin && (
             <Modal
               isOpen={isInviteModalOpen}
               onClose={() => setIsInviteModalOpen(false)}
-              title="Invite New Colleague"
+              title="Add Team Member"
               subtitle="Send an email invitation link with tenant pipeline access"
               maxWidth="max-w-md"
             >
