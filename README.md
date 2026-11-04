@@ -129,6 +129,15 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - Unauthorized modifications or deletions immediately return `403 Forbidden` (`"Unauthorized. You can only modify your own records."`).
 - **Legacy Document Compatibility**: The `createdBy` field is configured with `required: false` to guarantee pre-existing database records remain fully updateable without Mongoose validation errors.
 
+### 🛡️ 14. Universal Data Protection & Deletion Confirmation Modals
+- **Zero Accidental Data Loss**: Completely eliminated brittle browser-native `window.confirm` dialogs in favor of modern, custom Tailwind CSS confirmation modals across all destructive touchpoints:
+  - **Leads Pipeline**: Deletion of sales opportunities from both the Kanban cards and the Lead Detail Drawer is protected by `ConfirmDeleteModal` with dynamic lead targeting.
+  - **Client Directory**: Deleting corporate accounts from the client directory requires explicit modal confirmation specifying the target company.
+  - **Invoices & Billing Hub**: Invoice removal from the billing ledger is guarded with target invoice number verification and preview drawer cleanup.
+  - **Super Admin Workspace Actions**: Suspending or deleting tenant workspaces requires multi-step modal authorization.
+  - **Team Settings**: Detaching team members requires explicit member removal confirmation.
+- **Accessible & Responsive UX**: Modals feature backdrop blur (`bg-slate-950/80`), keyboard `Escape` dismissal, focus isolation, loading states (`isDeleting` with Lucide spinner), and event-driven sidebar stat synchronizations (`crm_sidebar_stats_updated`).
+
 ---
 
 ## 🛠️ Technology Stack

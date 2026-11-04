@@ -20,6 +20,7 @@ import {
 import { Badge, BadgeVariant } from '../components/common/Badge';
 import { Drawer } from '../components/common/Drawer';
 import { Modal } from '../components/common/Modal';
+import { ConfirmDeleteModal } from '../components/common/ConfirmDeleteModal';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import { Client, ClientStatus } from '../types';
@@ -51,6 +52,11 @@ export const Clients: React.FC = () => {
     country: '',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Delete Confirmation Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<Client | null>(null);
+  const [isDeletingClient, setIsDeletingClient] = useState(false);
 
   // Client History Drawer
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
@@ -301,10 +307,13 @@ export const Clients: React.FC = () => {
     }
   };
 
-  const handleDeleteClient = async (clientId: string, companyName: string) => {
-    const isConfirmed = window.confirm(`Are you sure you want to delete the client record for ${companyName}?`);
-    if (!isConfirmed) return;
+  const handleConfirmDeleteClient = async () => {
+    if (!itemToDelete) return;
+    const clientId = itemToDelete.id || (itemToDelete as any)._id;
+    const companyName = itemToDelete.companyName || itemToDelete.name || (itemToDelete as any).company || 'Client';
+    if (!clientId) return;
 
+    setIsDeletingClient(true);
     try {
       const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.delete(`/api/clients/${clientId}`, {
@@ -317,10 +326,15 @@ export const Clients: React.FC = () => {
         setClients((prev) => prev.filter((c) => (c.id || (c as any)._id) !== clientId));
         setTotalClients((prev) => Math.max(0, prev - 1));
         notify(response.data.message || `Deleted client record for ${companyName}`, 'info');
+        window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
+        setIsDeleteModalOpen(false);
+        setItemToDelete(null);
       }
     } catch (err: any) {
       console.error('[Delete Client Error]:', err);
       notify(err.response?.data?.message || 'Failed to delete client record.', 'error');
+    } finally {
+      setIsDeletingClient(false);
     }
   };
 
@@ -581,7 +595,10 @@ export const Clients: React.FC = () => {
                           </button>
 
                           <button
-                            onClick={() => handleDeleteClient(clientId, companyName)}
+                            onClick={() => {
+                              setItemToDelete(client);
+                              setIsDeleteModalOpen(true);
+                            }}
                             title="Delete Client"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                           >
@@ -1100,6 +1117,29 @@ export const Clients: React.FC = () => {
           </form>
         )}
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          if (!isDeletingClient) {
+            setIsDeleteModalOpen(false);
+            setItemToDelete(null);
+          }
+        }}
+        onConfirm={handleConfirmDeleteClient}
+        title="Confirm Deletion"
+        itemType="client record"
+        itemName={
+          itemToDelete
+            ? itemToDelete.companyName ||
+              (itemToDelete as any).company ||
+              itemToDelete.name ||
+              (itemToDelete as any).contactName
+            : ''
+        }
+        isDeleting={isDeletingClient}
+      />
     </div>
   );
 };

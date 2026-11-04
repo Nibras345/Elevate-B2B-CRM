@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Drawer } from '../components/common/Drawer';
 import { Modal } from '../components/common/Modal';
+import { ConfirmDeleteModal } from '../components/common/ConfirmDeleteModal';
 import { Badge, BadgeVariant } from '../components/common/Badge';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +51,11 @@ export const LeadsPipeline: React.FC = () => {
   // Selected lead for View/Edit Drawer
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Delete Confirmation Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<Lead | null>(null);
+  const [isDeletingLead, setIsDeletingLead] = useState(false);
 
   // Add New Lead Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -290,11 +296,13 @@ export const LeadsPipeline: React.FC = () => {
     }
   };
 
-  // DELETE /api/leads/:id
-  const handleDeleteLead = async (leadId: string) => {
-    const isConfirmed = window.confirm('Are you sure you want to remove this lead opportunity?');
-    if (!isConfirmed) return;
+  // DELETE /api/leads/:id via confirmation modal
+  const handleConfirmDeleteLead = async () => {
+    if (!itemToDelete) return;
+    const leadId = itemToDelete.id || (itemToDelete as any)._id;
+    if (!leadId) return;
 
+    setIsDeletingLead(true);
     try {
       const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.delete(`/api/leads/${leadId}`, {
@@ -304,15 +312,22 @@ export const LeadsPipeline: React.FC = () => {
       });
 
       if (response.data.success) {
-        setLeads((prev) => prev.filter((l) => (l.id || l._id) !== leadId));
+        setLeads((prev) => prev.filter((l) => (l.id || (l as any)._id) !== leadId));
         setTotalLeads((prev) => Math.max(0, prev - 1));
-        setIsDrawerOpen(false);
+        if (selectedLead && (selectedLead.id === leadId || (selectedLead as any)._id === leadId)) {
+          setIsDrawerOpen(false);
+          setSelectedLead(null);
+        }
         notify(response.data.message || 'Lead removed from sales pipeline', 'info');
         window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
+        setIsDeleteModalOpen(false);
+        setItemToDelete(null);
       }
     } catch (err: any) {
       console.error('[Delete Lead Error]:', err);
       notify(err.response?.data?.message || 'Failed to delete lead.', 'error');
+    } finally {
+      setIsDeletingLead(false);
     }
   };
 
@@ -553,10 +568,10 @@ export const LeadsPipeline: React.FC = () => {
                             </Badge>
                           </div>
 
-                          {/* Quick Stage Mover Selector */}
+                          {/* Quick Stage Mover Selector & Quick Delete */}
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="relative"
+                            className="flex items-center gap-1"
                           >
                             <select
                               value={lead.stage}
@@ -570,6 +585,18 @@ export const LeadsPipeline: React.FC = () => {
                                 </option>
                               ))}
                             </select>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setItemToDelete(lead);
+                                setIsDeleteModalOpen(true);
+                              }}
+                              title="Delete Lead"
+                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-md transition-all cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
 
@@ -829,7 +856,10 @@ export const LeadsPipeline: React.FC = () => {
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => handleDeleteLead(selectedLead.id || (selectedLead as any)._id)}
+                onClick={() => {
+                  setItemToDelete(selectedLead);
+                  setIsDeleteModalOpen(true);
+                }}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
@@ -1041,6 +1071,29 @@ export const LeadsPipeline: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          if (!isDeletingLead) {
+            setIsDeleteModalOpen(false);
+            setItemToDelete(null);
+          }
+        }}
+        onConfirm={handleConfirmDeleteLead}
+        title="Confirm Deletion"
+        itemType="lead opportunity"
+        itemName={
+          itemToDelete
+            ? itemToDelete.company ||
+              (itemToDelete as any).companyName ||
+              itemToDelete.name ||
+              (itemToDelete as any).contactName
+            : ''
+        }
+        isDeleting={isDeletingLead}
+      />
     </div>
   );
 };

@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Modal } from '../components/common/Modal';
+import { ConfirmDeleteModal } from '../components/common/ConfirmDeleteModal';
 import { Badge, BadgeVariant } from '../components/common/Badge';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
@@ -54,6 +55,11 @@ export const Invoices: React.FC = () => {
   // Preview Modal state
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [activeInvoiceForPreview, setActiveInvoiceForPreview] = useState<Invoice | null>(null);
+
+  // Delete Confirmation Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<Invoice | null>(null);
+  const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
 
   const { notify } = useNotification();
   const { user, tenantSettings } = useAuth();
@@ -280,11 +286,14 @@ export const Invoices: React.FC = () => {
     }
   };
 
-  // Route 3: DELETE /api/invoices/:id - Delete invoice
-  const handleDeleteInvoice = async (id: string, invoiceNumber?: string) => {
-    const isConfirmed = window.confirm(`Are you sure you want to delete invoice ${invoiceNumber || id}?`);
-    if (!isConfirmed) return;
+  // Route 3: DELETE /api/invoices/:id - Delete invoice via confirmation modal
+  const handleConfirmDeleteInvoice = async () => {
+    if (!itemToDelete) return;
+    const id = itemToDelete.id || (itemToDelete as any)._id;
+    const invoiceNumber = itemToDelete.invoiceNumber || id;
+    if (!id) return;
 
+    setIsDeletingInvoice(true);
     try {
       const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.delete(`/api/invoices/${id}`, {
@@ -300,12 +309,16 @@ export const Invoices: React.FC = () => {
           setIsPreviewOpen(false);
           setActiveInvoiceForPreview(null);
         }
-        notify(response.data.message || 'Invoice deleted successfully', 'info');
+        notify(response.data.message || `Invoice ${invoiceNumber} deleted successfully`, 'info');
         window.dispatchEvent(new CustomEvent('crm_sidebar_stats_updated'));
+        setIsDeleteModalOpen(false);
+        setItemToDelete(null);
       }
     } catch (err: any) {
       console.error('[Delete Invoice Error]:', err);
       notify(err.response?.data?.message || 'Failed to delete invoice.', 'error');
+    } finally {
+      setIsDeletingInvoice(false);
     }
   };
 
@@ -537,7 +550,10 @@ export const Invoices: React.FC = () => {
                           )}
 
                           <button
-                            onClick={() => handleDeleteInvoice(invId, invNumber)}
+                            onClick={() => {
+                              setItemToDelete(inv);
+                              setIsDeleteModalOpen(true);
+                            }}
                             title="Delete Invoice"
                             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                           >
@@ -1049,6 +1065,26 @@ export const Invoices: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          if (!isDeletingInvoice) {
+            setIsDeleteModalOpen(false);
+            setItemToDelete(null);
+          }
+        }}
+        onConfirm={handleConfirmDeleteInvoice}
+        title="Confirm Deletion"
+        itemType="invoice"
+        itemName={
+          itemToDelete
+            ? itemToDelete.invoiceNumber || itemToDelete.id || (itemToDelete as any)._id
+            : ''
+        }
+        isDeleting={isDeletingInvoice}
+      />
     </div>
   );
 };
