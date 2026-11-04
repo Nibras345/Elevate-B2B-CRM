@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
@@ -22,6 +23,8 @@ import {
   Activity,
   Layers,
   ArrowLeft,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -37,7 +40,12 @@ export const SuperAdminDashboard: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Active' | 'Suspended'>('ALL');
-  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+
+  // Confirmation Modal State
+  const [isActionModalOpen, setIsActionModalOpen] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<SuperAdminTenant | null>(null);
+  const [actionType, setActionType] = useState<string>(''); // 'suspend' or 'delete'
+  const [isSubmittingAction, setIsSubmittingAction] = useState<boolean>(false);
 
   // Format currency in USD (e.g., $1,250,000)
   const formatUSD = (val: number): string => {
@@ -93,62 +101,72 @@ export const SuperAdminDashboard: React.FC = () => {
     fetchSuperAdminData();
   }, [fetchSuperAdminData]);
 
-  // Handle Tenant Status Toggle (Suspend / Activate)
-  const handleToggleStatus = async (tenant: SuperAdminTenant) => {
-    const nextStatus = tenant.status === 'Suspended' ? 'Active' : 'Suspended';
-    try {
-      setActionInProgress(tenant.id);
-      const token = localStorage.getItem('nexcrm_jwt_token');
-
-      const response = await axios.patch(
-        `/api/super-admin/tenants/${tenant.id}/status`,
-        { status: nextStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (response.data?.success) {
-        setTenants((prev) =>
-          prev.map((t) => (t.id === tenant.id ? { ...t, status: nextStatus } : t))
-        );
-        notify(
-          `Tenant "${tenant.companyName || tenant.tenantId}" is now ${nextStatus}.`,
-          nextStatus === 'Active' ? 'success' : 'warning'
-        );
-      }
-    } catch (error: any) {
-      console.error('Failed to update tenant status:', error);
-      notify(error.response?.data?.message || 'Failed to update tenant status.', 'error');
-    } finally {
-      setActionInProgress(null);
-    }
+  // Action Handlers for Modal Workflow
+  const handleOpenActionModal = (company: SuperAdminTenant, type: string) => {
+    setSelectedCompany(company);
+    setActionType(type);
+    setIsActionModalOpen(true);
   };
 
-  // Handle Tenant Deletion
-  const handleDeleteTenant = async (tenant: SuperAdminTenant) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete workspace "${tenant.companyName || tenant.tenantId}"? This action cannot be undone.`
-    );
-    if (!confirmed) return;
+  const handleCloseActionModal = () => {
+    if (isSubmittingAction) return;
+    setIsActionModalOpen(false);
+    setSelectedCompany(null);
+    setActionType('');
+  };
+
+  const handleConfirmAction = async () => {
+    if (!selectedCompany || !actionType) return;
 
     try {
-      setActionInProgress(tenant.id);
+      setIsSubmittingAction(true);
       const token = localStorage.getItem('nexcrm_jwt_token');
+      const companyId = selectedCompany.id || selectedCompany._id;
 
-      const response = await axios.delete(`/api/super-admin/tenants/${tenant.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      if (actionType === 'delete') {
+        const response = await axios.delete(`/api/super-admin/tenants/${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      if (response.data?.success) {
-        setTenants((prev) => prev.filter((t) => t.id !== tenant.id));
-        notify(`Company "${tenant.companyName || tenant.tenantId}" successfully removed.`, 'success');
-        // Refresh aggregate stats
-        fetchSuperAdminData(true);
+        if (response.data?.success) {
+          setTenants((prev) => prev.filter((t) => (t.id || t._id) !== companyId));
+          notify(
+            `Workspace "${selectedCompany.name || selectedCompany.companyName}" successfully deleted.`,
+            'success'
+          );
+          // Refresh aggregate KPI stats
+          fetchSuperAdminData(true);
+        }
+      } else if (actionType === 'suspend') {
+        const nextStatus = selectedCompany.status === 'Suspended' ? 'Active' : 'Suspended';
+        const response = await axios.patch(
+          `/api/super-admin/tenants/${companyId}/status`,
+          { status: nextStatus },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (response.data?.success) {
+          setTenants((prev) =>
+            prev.map((t) =>
+              (t.id || t._id) === companyId ? { ...t, status: nextStatus } : t
+            )
+          );
+          notify(
+            `Workspace "${selectedCompany.name || selectedCompany.companyName}" is now ${nextStatus}.`,
+            nextStatus === 'Active' ? 'success' : 'warning'
+          );
+        }
       }
+
+      handleCloseActionModal();
     } catch (error: any) {
-      console.error('Failed to delete tenant:', error);
-      notify(error.response?.data?.message || 'Failed to delete workspace.', 'error');
+      console.error(`Failed to execute ${actionType} action:`, error);
+      notify(
+        error.response?.data?.message || `Failed to execute ${actionType} action on company.`,
+        'error'
+      );
     } finally {
-      setActionInProgress(null);
+      setIsSubmittingAction(false);
     }
   };
 
@@ -488,13 +506,16 @@ export const SuperAdminDashboard: React.FC = () => {
                           <div className="flex items-center justify-end gap-2">
                             {/* Suspend / Activate Button */}
                             <button
-                              onClick={() => handleToggleStatus(tenant)}
-                              disabled={actionInProgress === tenant.id}
+                              onClick={() => {
+                                setSelectedCompany(tenant);
+                                setActionType('suspend');
+                                setIsActionModalOpen(true);
+                              }}
                               className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
                                 tenant.status === 'Suspended'
                                   ? 'bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border-emerald-700/50'
                                   : 'bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border-amber-700/40'
-                              } disabled:opacity-50`}
+                              }`}
                               title={tenant.status === 'Suspended' ? 'Re-activate workspace' : 'Suspend workspace'}
                             >
                               {tenant.status === 'Suspended' ? (
@@ -512,9 +533,12 @@ export const SuperAdminDashboard: React.FC = () => {
 
                             {/* Delete Button */}
                             <button
-                              onClick={() => handleDeleteTenant(tenant)}
-                              disabled={actionInProgress === tenant.id}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-700/40 transition hover:border-rose-500 disabled:opacity-50"
+                              onClick={() => {
+                                setSelectedCompany(tenant);
+                                setActionType('delete');
+                                setIsActionModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-700/40 transition hover:border-rose-500"
                               title="Delete workspace"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -541,6 +565,89 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
         </section>
       </main>
+
+      {/* ======================================================== */}
+      {/* 3. CONFIRMATION MODAL (SUSPEND / DELETE)                 */}
+      {/* ======================================================== */}
+      {isActionModalOpen && selectedCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          {/* Modal Backdrop click to close */}
+          <div
+            className="fixed inset-0"
+            onClick={handleCloseActionModal}
+          />
+
+          {/* Modal Container */}
+          <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5 z-10">
+            {/* Header */}
+            <div className="flex items-start gap-4">
+              <div
+                className={`p-3 rounded-2xl flex-shrink-0 ${
+                  actionType === 'delete'
+                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                }`}
+              >
+                {actionType === 'delete' ? (
+                  <Trash2 className="w-6 h-6" />
+                ) : (
+                  <AlertTriangle className="w-6 h-6" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  Confirm {actionType === 'delete' ? 'Deletion' : 'Suspension'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Tenant ID: <span className="font-mono text-slate-300">{selectedCompany.tenantId}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseActionModal}
+                disabled={isSubmittingAction}
+                className="text-slate-400 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body Text */}
+            <div className="bg-slate-950/60 rounded-xl p-4 border border-slate-800/80 text-sm text-slate-300 leading-relaxed">
+              Are you sure you want to {actionType} the workspace for &quot;
+              <span className="font-semibold text-white">
+                {selectedCompany?.name || selectedCompany?.companyName}
+              </span>
+              &quot;? This action is irreversible.
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCloseActionModal}
+                disabled={isSubmittingAction}
+                className="px-4 py-2.5 text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAction}
+                disabled={isSubmittingAction}
+                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition shadow-lg disabled:opacity-50 ${
+                  actionType === 'delete'
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30'
+                    : 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30'
+                }`}
+              >
+                {isSubmittingAction && <Loader2 className="w-4 h-4 animate-spin" />}
+                Confirm Action
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

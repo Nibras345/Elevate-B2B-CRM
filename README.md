@@ -118,7 +118,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - **Admin Email**: Dynamically locates the user with the `Company Admin` role for each specific tenant.
   - **Seats Used**: Progress-tracked seat utilization indicator (`seatsUsed / maxSeats`) with colored capacity thresholds.
   - **Total Company Revenue**: Sum of closed deals and paid invoices isolated per company.
-  - **Status & Actions**: Interactive `Active` / `Suspended` status indicators with "Suspend" and "Delete" capabilities.
+  - **Status & Actions**: Interactive `Active` / `Suspended` status indicators with "Suspend" and "Delete" actions guarded by a Confirmation Modal to prevent accidental operations.
 
 ### 🔒 13. Record-Level Ownership & Granular Authorization
 - **Granular Document Authorship**: `Lead`, `Client`, and `Invoice` schemas track document authorship via `createdBy` referencing `User`.
