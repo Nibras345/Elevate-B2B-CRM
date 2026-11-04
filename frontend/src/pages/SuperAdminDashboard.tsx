@@ -28,13 +28,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { SuperAdminStats, SuperAdminTenant } from '../types';
+import { DashboardStatsResponse, SuperAdminTenant } from '../types';
 
 export const SuperAdminDashboard: React.FC = () => {
   const { user } = useAuth();
   const { notify } = useNotification();
 
-  const [stats, setStats] = useState<SuperAdminStats | null>(null);
+  const [stats, setStats] = useState<DashboardStatsResponse | null>(null);
   const [tenants, setTenants] = useState<SuperAdminTenant[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -47,7 +47,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const [actionType, setActionType] = useState<string>(''); // 'suspend' or 'delete'
   const [isSubmittingAction, setIsSubmittingAction] = useState<boolean>(false);
 
-  // Format currency in USD (e.g., $1,250,000)
+  // Format currency in USD (e.g., $619,213)
   const formatUSD = (val: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -70,16 +70,16 @@ export const SuperAdminDashboard: React.FC = () => {
       };
 
       const [statsRes, tenantsRes] = await Promise.all([
-        axios.get('/api/super-admin/dashboard-stats', authHeader),
+        axios.get<DashboardStatsResponse>('/api/super-admin/dashboard-stats', authHeader),
         axios.get('/api/super-admin/tenants', authHeader),
       ]);
 
-      if (statsRes.data?.success) {
-        const statsData = statsRes.data.stats || statsRes.data;
+      if (statsRes.data?.success || statsRes.data?.totalRegisteredCompanies !== undefined) {
+        const statsData = (statsRes.data as any).stats || statsRes.data;
         setStats({
-          totalCompanies: Number(statsData.totalCompanies) || 0,
-          totalPlatformUsers: Number(statsData.totalPlatformUsers) || 0,
-          totalPlatformRevenue: Number(statsData.totalPlatformRevenue) || 0,
+          totalRegisteredCompanies: Number(statsData.totalRegisteredCompanies ?? statsData.totalCompanies) || 0,
+          totalActiveCompanies: Number(statsData.totalActiveCompanies ?? statsData.totalCompanies) || 0,
+          globalPlatformRevenue: Number(statsData.globalPlatformRevenue ?? statsData.totalPlatformRevenue) || 0,
         });
       }
 
@@ -155,6 +155,8 @@ export const SuperAdminDashboard: React.FC = () => {
             `Workspace "${selectedCompany.name || selectedCompany.companyName}" is now ${nextStatus}.`,
             nextStatus === 'Active' ? 'success' : 'warning'
           );
+          // Refresh active companies count immediately
+          fetchSuperAdminData(true);
         }
       }
 
@@ -250,13 +252,13 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-violet-400/90">
-                  Total Registered Companies
+                  TOTAL REGISTERED COMPANIES
                 </p>
                 <h3 className="text-3xl font-black text-white mt-2 tracking-tight">
                   {isLoading ? (
                     <span className="inline-block w-16 h-8 bg-slate-800 rounded animate-pulse" />
                   ) : (
-                    stats?.totalCompanies ?? 0
+                    stats?.totalRegisteredCompanies ?? 0
                   )}
                 </h3>
               </div>
@@ -267,37 +269,37 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
               <span className="flex items-center gap-1.5 text-violet-300">
                 <Layers className="w-3.5 h-3.5" />
-                Active SaaS Organizations
+                Registered SaaS Workspaces
               </span>
-              <span className="font-mono text-slate-500">Multi-tenant isolated</span>
+              <span className="font-mono text-slate-500">Live Database Count</span>
             </div>
           </div>
 
-          {/* Card 2: Total Active Seats / Users */}
+          {/* Card 2: Total Active Companies */}
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-slate-900/90 border border-indigo-800/40 p-6 shadow-xl shadow-slate-950/50 hover:border-indigo-600/60 transition-all">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-indigo-400/90">
-                  Total Active Seats / Users
+                  TOTAL ACTIVE COMPANIES
                 </p>
                 <h3 className="text-3xl font-black text-white mt-2 tracking-tight">
                   {isLoading ? (
                     <span className="inline-block w-16 h-8 bg-slate-800 rounded animate-pulse" />
                   ) : (
-                    stats?.totalPlatformUsers ?? 0
+                    stats?.totalActiveCompanies ?? 0
                   )}
                 </h3>
               </div>
               <div className="w-13 h-13 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
-                <Users className="w-7 h-7" />
+                <CheckCircle2 className="w-7 h-7" />
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
               <span className="flex items-center gap-1.5 text-indigo-300">
                 <Activity className="w-3.5 h-3.5" />
-                Provisioned Users Platform-Wide
+                Operational & Healthy Status
               </span>
-              <span className="font-mono text-slate-500">Global RBAC</span>
+              <span className="font-mono text-slate-500">Excludes Suspended</span>
             </div>
           </div>
 
@@ -306,13 +308,13 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400/90">
-                  Global Platform Revenue
+                  GLOBAL PLATFORM REVENUE
                 </p>
                 <h3 className="text-3xl font-black text-emerald-400 mt-2 tracking-tight">
                   {isLoading ? (
                     <span className="inline-block w-24 h-8 bg-slate-800 rounded animate-pulse" />
                   ) : (
-                    formatUSD(stats?.totalPlatformRevenue ?? 0)
+                    formatUSD(stats?.globalPlatformRevenue ?? 0)
                   )}
                 </h3>
               </div>

@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { Tenant } from '../models/Tenant';
 import { User } from '../models/User';
@@ -7,27 +7,81 @@ import { Invoice } from '../models/Invoice';
 import { AuthRequest } from '../types';
 
 /**
+ * @interface DashboardStatsResponse
+ * Strictly typed API response contract for Super Admin Dashboard Telemetry
+ */
+export interface DashboardStatsResponse {
+  success: boolean;
+  totalRegisteredCompanies: number;
+  totalActiveCompanies: number;
+  globalPlatformRevenue: number;
+  totalCompanies?: number;
+  totalPlatformUsers?: number;
+  stats?: {
+    totalRegisteredCompanies: number;
+    totalActiveCompanies: number;
+    globalPlatformRevenue: number;
+    totalCompanies: number;
+    totalPlatformUsers: number;
+    totalPlatformRevenue: number;
+    totalLeadsRevenue: number;
+    totalInvoicesRevenue: number;
+  };
+}
+
+interface CompanyAggResult {
+  _id: null;
+  totalRegistered: number;
+  totalActive: number;
+}
+
+interface RevenueAggResult {
+  _id: null;
+  total: number;
+}
+
+/**
  * @route   GET /api/super-admin/dashboard-stats
- * @desc    Fetch platform-wide aggregated statistics across all tenants
+ * @desc    Fetch platform-wide aggregated statistics across all tenants with strict TypeScript typing
  * @access  Private (Super Admin strictly)
  */
 export const getSuperAdminDashboardStats = async (
-  _req: AuthRequest,
+  _req: Request | AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    // 1. Total Companies: Count distinct tenant documents or tenant IDs
-    const tenantCount = await Tenant.countDocuments();
+    // 1. Total Registered Companies & Total Active Companies:
+    // Execute MongoDB Aggregation on Tenant collection
+    const companyAgg = await Tenant.aggregate<CompanyAggResult>([
+      {
+        $group: {
+          _id: null,
+          totalRegistered: { $sum: 1 },
+          totalActive: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'Suspended'] }, 0, 1],
+            },
+          },
+        },
+      },
+    ]);
+
+    let totalRegisteredCompanies = companyAgg[0]?.totalRegistered ?? 0;
+    let totalActiveCompanies = companyAgg[0]?.totalActive ?? 0;
+
+    // Check distinct tenantId in User to ensure any newly provisioned workspace code is counted
     const distinctUserTenants = (await User.distinct('tenantId')).filter(Boolean).length;
-    const totalCompanies = Math.max(tenantCount, distinctUserTenants);
+    if (distinctUserTenants > totalRegisteredCompanies) {
+      const difference = distinctUserTenants - totalRegisteredCompanies;
+      totalRegisteredCompanies = distinctUserTenants;
+      totalActiveCompanies += difference;
+    }
 
-    // 2. Total Platform Users: Count all users across entire database
-    const totalPlatformUsers = await User.countDocuments();
-
-    // 3. Total Platform Revenue: Sum of all 'Won / Closed' leads (or Paid Invoices) across the entire database
+    // 2. Global Platform Revenue:
+    // Run MongoDB Aggregations to sum estimatedValue for all Leads where stage === 'Won / Closed' (and settled Paid Invoices)
     const [leadRevenueAgg, invoiceRevenueAgg] = await Promise.all([
-      Lead.aggregate([
+      Lead.aggregate<RevenueAggResult>([
         {
           $match: {
             stage: { $in: ['Won / Closed', 'Won'] },
@@ -44,7 +98,7 @@ export const getSuperAdminDashboardStats = async (
           },
         },
       ]),
-      Invoice.aggregate([
+      Invoice.aggregate<RevenueAggResult>([
         {
           $match: {
             status: 'Paid',
@@ -66,24 +120,34 @@ export const getSuperAdminDashboardStats = async (
     const totalLeadsRevenue = leadRevenueAgg[0]?.total || 0;
     const totalInvoicesRevenue = invoiceRevenueAgg[0]?.total || 0;
 
-    const totalPlatformRevenue =
+    // Absolute platform revenue across all companies
+    const globalPlatformRevenue =
       totalLeadsRevenue > 0 && totalInvoicesRevenue > 0
         ? totalLeadsRevenue + totalInvoicesRevenue
         : totalLeadsRevenue || totalInvoicesRevenue || 0;
 
-    res.status(200).json({
+    const totalPlatformUsers = await User.countDocuments();
+
+    const responsePayload: DashboardStatsResponse = {
       success: true,
-      totalCompanies,
+      totalRegisteredCompanies,
+      totalActiveCompanies,
+      globalPlatformRevenue,
+      totalCompanies: totalRegisteredCompanies,
       totalPlatformUsers,
-      totalPlatformRevenue,
       stats: {
-        totalCompanies,
+        totalRegisteredCompanies,
+        totalActiveCompanies,
+        globalPlatformRevenue,
+        totalCompanies: totalRegisteredCompanies,
         totalPlatformUsers,
-        totalPlatformRevenue,
+        totalPlatformRevenue: globalPlatformRevenue,
         totalLeadsRevenue,
         totalInvoicesRevenue,
       },
-    });
+    };
+
+    res.status(200).json(responsePayload);
   } catch (error: any) {
     next(error);
   }

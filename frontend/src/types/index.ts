@@ -1,9 +1,21 @@
 export type Role = 'Company Admin' | 'Employee' | 'Sales Agent' | 'Support' | 'Super Admin';
 
+export interface DashboardStatsResponse {
+  success?: boolean;
+  totalRegisteredCompanies: number;
+  totalActiveCompanies: number;
+  globalPlatformRevenue: number;
+  totalCompanies?: number;
+  totalPlatformUsers?: number;
+}
+
 export interface SuperAdminStats {
   totalCompanies: number;
   totalPlatformUsers: number;
   totalPlatformRevenue: number;
+  totalRegisteredCompanies?: number;
+  totalActiveCompanies?: number;
+  globalPlatformRevenue?: number;
 }
 
 export interface SuperAdminTenant {

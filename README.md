@@ -109,10 +109,10 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 ### 👑 12. Super Admin Command Center & Global SaaS Telemetry
 - **Dedicated Root Governance Interface**: A dedicated `/super-admin` master command console featuring a distinctive deep indigo/violet cyber-console theme to differentiate it from standard tenant CRM workspaces.
 - **Strict Super Admin Protection (`requireSuperAdmin`)**: Frontend route guarded by `SuperAdminRoute` checking for `user.role === 'Super Admin'`. Backend endpoints strictly enforce `requireSuperAdmin` middleware, returning `403 Forbidden` for non-super-admin users.
-- **Top 3 Aggregated Platform KPIs**:
-  - **Total Registered Companies**: Live count of all active tenant organizations across MongoDB.
-  - **Total Active Seats / Users**: Global count of provisioned user accounts platform-wide.
-  - **Global Platform Revenue**: Cross-tenant MongoDB aggregation summing all 'Won / Closed' deals and 'Paid' invoices.
+- **Top 3 100% Real-Time Aggregated Platform KPIs**:
+  - **TOTAL REGISTERED COMPANIES**: Live count of all unique registered tenant organizations across MongoDB.
+  - **TOTAL ACTIVE COMPANIES**: Real-time count of active, operational tenant organizations platform-wide (excludes suspended/deleted workspaces).
+  - **GLOBAL PLATFORM REVENUE**: Real-time cross-tenant MongoDB aggregation dynamically summing all 'Won / Closed' deals and settled 'Paid' invoices (e.g., `$619,213`) with zero mock or duplicated data.
 - **Registered Companies Directory Table**:
   - **Company ID & Workspace Name**: Unique tenant identifier with instant one-click copy and display name.
   - **Admin Email**: Dynamically locates the user with the `Company Admin` role for each specific tenant.
