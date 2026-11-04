@@ -8,7 +8,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v3.4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Vite](https://img.shields.io/badge/Vite-v8.3-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 
-An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM) platform engineered with the MERN stack and TypeScript. Elevate B2B CRM delivers robust workspace data isolation, granular Role-Based Access Control (RBAC), dynamic seat allocation, transactional email-driven member onboarding, pipeline revenue forecasting, client relationship databases, and a fully database-driven invoicing ledger.
+An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM) platform engineered with the MERN stack and TypeScript. Elevate B2B CRM delivers robust workspace data isolation, granular Role-Based Access Control (RBAC), strict 5-seat capacity governance, transactional email-driven member onboarding, automated Won/Closed lead-to-client conversions, unified deletion confirmation modals, pipeline revenue forecasting, client relationship databases, a fully database-driven invoicing ledger, and real-time Super Admin platform telemetry.
 
 ---
 
@@ -18,42 +18,73 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Tenant Isolation**: Every lead, client, deal, invoice, and user relationship is strictly partitioned by `tenantId` (ObjectId referencing `Tenant`), guarded by middleware (`protect` and `tenantGuard`).
 - **Zero Cross-Tenant Leakage**: All read, write, update, and delete operations filter by the authenticated session's tenant context. Cross-tenant access attempts return `404 Not Found`.
 - **Multi-Workspace Membership**: Users can belong to multiple distinct tenant organizations simultaneously using a unified corporate account.
-- **Per-Workspace Roles**: A single user can act as `Company Admin` in one workspace and `Sales Agent` in another, with seamless contextual switching.
+- **Per-Workspace Roles**: A single user can act as `Company Admin` in one workspace and `Sales Agent` or `Employee` in another, with seamless contextual switching.
 - **Safe Member Detachment**: Removing a member uses MongoDB `$pull` on the user's `workspaces` array, leaving their accounts and relationships in other workspaces intact.
 - **Interactive Confirmation Dialog**: Trash icon triggers a custom confirmation modal ("Remove Team Member") ensuring no accidental member removal, complete with loading spinners and state cleanup.
 - **Strict Role & Self-Deletion Guards**: Prevents Company Admins from deleting their own active accounts (`400 Bad Request`), restricts removal rights exclusively to admins, ensures strict `tenantId` isolation, and fully supports all system roles including `Support`.
 
-### 👥 2. Dynamic Seat Management & Governance
-- **Configurable Capacity**: Tenant workspaces feature dynamic seat thresholds (`maxSeats`, default: 5).
-- **Real-Time Seat Aggregation**: The `GET /api/tenant/stats` endpoint calculates `usedSeats` as `(Active Users Count) + (Pending Invites Count)` in real time.
-- **Strict Backend Seat Limit Enforcement**: Prevents workspace overflow by securely validating existing member counts and pending invitations prior to creating user or invite records (`403 Forbidden: "Seat limit reached. Please upgrade your workspace plan to add more team members."`). Dynamically checks `tenant.seatLimit` or `tenant.maxSeats`.
-- **Frontend Guard & UI Tooltip**: Catches 403 API seat responses in the invite modal `try/catch` and surfaces a prominent warning toast ("Seat limit of 5 reached. Upgrade plan required."). Conditionally disables the "+ Invite User" button when local `members.length >= 5` with an interactive "Maximum seats reached" tooltip.
+### 👥 2. Strict 5-Seat Management & Workspace Governance
+- **Strict 5-Seat Capacity**: Every tenant workspace enforces a strict default limit of **5 seats** (1 Admin + 4 Employees).
+- **Backend API Limit Enforcement**: `POST /api/team/invite` and `POST /api/team/accept-invite/:token` query MongoDB in real time to count existing members plus pending invitations:
+  ```typescript
+  const currentSeatCount = await User.countDocuments({
+    $or: [
+      { tenantId: currentTenantId },
+      { tenantIds: currentTenantId },
+      { 'workspaces.tenantId': currentTenantId },
+    ],
+    isActive: { $ne: false },
+  });
+  if (currentSeatCount >= 5) {
+    return res.status(403).json({ message: 'Seat limit reached. You cannot add more than 5 members.' });
+  }
+  ```
+  This eliminates any possibility of bypassing capacity limits via direct API or Postman calls.
+- **Frontend "+ Add Member" Button Guard**: Placed next to the refresh icon in Settings. Conditionally rendered only for admins (`Company Admin` or `Super Admin`), and dynamically disabled when `team.length >= 5`:
+  ```tsx
+  disabled={team.length >= 5 || isSeatLimitReached}
+  className="... disabled:opacity-50 disabled:cursor-not-allowed"
+  ```
+  Surfaces a real-time hover tooltip: `"Seat limit reached (5 / 5)"`.
+- **Interactive Sidebar Seat Widget**: The "Seats in use" block in the sidebar features interactive hover styles (`cursor-pointer hover:bg-slate-800 rounded-md p-1`) and one-click redirection directly to `/team-members` (which routes to `/settings?tab=team`).
 - **Instant Client-Side Sync**: Employs global browser event dispatching (`crm_seat_stats_updated`) to update the Sidebar subscription card and Team settings in real-time.
 - **Dynamic Closed Revenue Aggregation**: Team members table calculates actual won deal totals per user via a multi-stage MongoDB aggregation pipeline (`$lookup` across tenant leads, `$filter` for `Won / Closed` stage, and `$reduce` summing `estimatedValue`), projecting real-time revenue instead of static $0 placeholders.
 
-### ✉️ 3. Transactional Email Invitation Onboarding
-- **Company Admin-Exclusive Invitation Authority**: Only the 'Company Admin' role can trigger new invitations. The "+ Invite User" button and all invite modals are conditionally rendered and completely hidden from 'Employee' and 'Support' roles on the frontend (`currentUser?.role === 'Company Admin'`). The backend route (`POST /api/team/invite`) is protected with dedicated `requireAdmin` middleware, blocking non-admin attempts with `403 Forbidden: "Access Denied: Only Company Admins can perform this action."`.
+### 🛡️ 3. Settings RBAC & Role Separation
+- **Hidden "Company Settings" Tab**: Regular employees cannot see or access the "Company Settings" tab. The tab navigation conditionally renders it only for `Company Admin` or `Super Admin`:
+  ```tsx
+  const isAdmin = currentUser?.role === 'Company Admin' || currentUser?.role === 'Super Admin';
+  // Company tab only included when isAdmin === true
+  ```
+- **URL Navigation Interceptor**: If an unauthorized user attempts to navigate directly to `?tab=company`, an active route guard redirects them immediately to `?tab=profile`. The tab content panel also checks `activeTab === 'company' && isAdmin`.
+- **Admin-Only Team Management**: Inviting, adding, and removing team members is strictly guarded for admin roles on both client and server.
+
+### ✉️ 4. Transactional Email Invitation Onboarding & Login Redirection
 - **Cryptographic Token Verification**: Generates secure 32-byte hexadecimal tokens stored in an `Invitation` model with a 7-day expiration policy.
-- **Dual Onboarding Paths**:
-  - **New Users**: Land on `/invite/accept/:token`, set their full name and password, and instantly join the workspace.
-  - **Existing Users**: Authenticated users belonging to another tenant can join new workspaces with a single click without setting redundant passwords.
-- **Nodemailer SMTP Integration**: Automated branded invitation emails with direct activation links.
+- **Nodemailer SMTP Integration**: Automated branded invitation emails containing the recipient's assigned role, department, workspace company, and an activation link.
+- **Post-Acceptance Redirection Flow**:
+  - After an invited user successfully submits the account setup form on `/invite/accept/:token`, their session is safely initialized.
+  - The system dispatches a success toast message: `"Account setup complete. Please log in to continue."`.
+  - The application strictly redirects the user to `/login` (`navigate('/login', { state: { email: invitation?.email } })`).
+  - The `/login` page automatically detects the forwarded router state and pre-fills the invited user's email address for immediate sign-in.
 
-### 📈 4. Leads Pipeline & Automated Client Conversion
+### 📈 5. Leads Pipeline & Automated Won/Closed Lead-to-Client Conversion
 - **Visual Kanban Board**: Interactive stages (`New Lead`, `Contacted`, `Proposal Sent`, `Negotiation`, `Won / Closed`) with real-time stage transitions.
-- **Dynamic Assigned Sales Rep**: "Add New Lead Opportunity" modal fetches active workspace members dynamically via `GET /api/users`, eliminating static reps like "Alex Morgan" and linking leads directly to real team members.
-- **Dynamic Owner Filter**: The Kanban board filters opportunities dynamically by team member owners fetched from the database.
-- **Dynamic Country & Location Tracking**: Integrated Country text field across "Add New Lead Opportunity" and "Edit Lead" drawer, bound to form states and stored in `Lead.country` with zero hardcoded defaults.
-- **Automatic Client Conversion**: Moving a lead to `Won / Closed` automatically creates a corresponding enterprise `Client` record (or updates existing client lifetime value) and archives the won deal.
-- **Deal Value Aggregation**: Tracks estimated values, priority tags, and stage metrics dynamically.
+- **Automated Lead-to-Client Conversion (`PUT /api/leads/:id`)**:
+  - When a lead's stage is updated to `"Won / Closed"`, the backend automatically provisions or updates a corresponding `Client` record in the database.
+  - Checks if a client with the lead's email already exists in the workspace to avoid duplication.
+  - Maps `contactName`, `companyName`, `email`, `phoneNumber`, `country`, `city`, and aggregates `estimatedValue` into the Client's `lifetimeValue`.
+  - Maps tenant IDs securely (resolving tenant codes like `TNT-TOKY-8511` to Mongoose ObjectIds) preventing any casting exceptions.
+  - Isolated within a resilient `try...catch` block to ensure lead stage transitions succeed smoothly even if client schema constraints encounter warnings.
+- **Dynamic Sales Reps & Locations**: Eliminates hardcoded reps; dynamic dropdowns query active members from `/api/users`. Full country tracking stored in `Lead.country` with zero dummy defaults.
 
-### 💼 5. Client Directory & Dynamic Metrics
+### 💼 6. Client Directory & Dynamic Metrics
 - **Dynamic Client Aggregation**: `GET /api/clients` dynamically aggregates each client's open `dealCount` and issued `invoiceCount` via MongoDB count queries.
 - **Lifetime Value Tracking**: Accurately tracks accumulated client revenue and historical conversion timestamps.
-- **Dynamic Country & Location Profiles**: "Add Client" and "Edit Client" modals support dynamic Country fields, pre-filling existing data on edit and persisting to MongoDB without hardcoded location fallbacks (removed static "United States" and "USA").
-- **Real-Time Client Ledger & Audit Trail**: The "Client Ledger & Account History" drawer fetches live historical transactions (`GET /api/clients/:id/history`), displaying actual invoice generation and settlement dates alongside deal conversion milestones instead of static dummy events.
+- **Dynamic Country & Location Profiles**: "Add Client" and "Edit Client" modals support dynamic Country fields, pre-filling existing data on edit and persisting to MongoDB without hardcoded location fallbacks.
+- **Real-Time Client Ledger & Audit Trail**: The "Client Ledger & Account History" drawer fetches live historical transactions (`GET /api/clients/:id/history`), displaying actual invoice generation and settlement dates alongside deal conversion milestones.
 
-### 🧾 6. Invoices & Billing Hub (Dynamic & Persistent)
+### 🧾 7. Invoices & Billing Hub (Dynamic & Persistent)
 - **Zero Mock Data**: Fully database-driven invoicing system with MongoDB persistence.
 - **Client Population**: Invoices populate client metadata (`contactName`, `companyName`, `email`, `phone`) using `.populate('clientId', 'contactName companyName email phone')`.
 - **Dynamic KPI Widgets**: Top 4 summary cards compute live from the billing ledger:
@@ -65,14 +96,35 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Instant Status Progression**: One-click checkmark action marks invoices as `Paid` via `PUT /api/invoices/:id/status`, immediately updating local state and recalculating KPI widgets without a page reload.
 - **Printable Template**: Pixel-perfect invoice modal ready for browser print and PDF export.
 
-### 🧭 7. Dynamic Sidebar Notification Badges & Live Metrics
+### 🛡️ 8. Universal Deletion Confirmation Modals (`ConfirmDeleteModal`)
+- **Zero Accidental Data Loss**: Completely eliminated browser-native `window.confirm()` popups in favor of accessible, responsive Tailwind CSS confirmation modals across all primary data tables and cards:
+  - **Leads Pipeline**: Deleting a sales opportunity from Kanban cards or the Lead Drawer prompts a confirmation modal specifying the lead's contact/company name.
+  - **Client Directory**: Deleting an enterprise client requires confirmation indicating the client company name.
+  - **Invoices Ledger**: Removing an invoice requires explicit modal confirmation displaying the target invoice number.
+- **Accessible & Clean UX**: Features dark backdrop blur (`bg-slate-950/80`), keyboard `Escape` dismissal, focus isolation, and asynchronous loading spinners (`isDeleting`) during Axios execution.
+
+### 👑 9. Super Admin Command Center & 100% Real-Time Platform Telemetry
+- **Dedicated Root Governance Interface**: A dedicated `/super-admin` master command console featuring a distinctive deep indigo/violet cyber-console theme to differentiate it from standard tenant CRM workspaces.
+- **Strict Super Admin Protection (`requireSuperAdmin`)**: Frontend route guarded by `SuperAdminRoute` checking for `user.role === 'Super Admin'`. Backend endpoints strictly enforce `requireSuperAdmin` middleware, returning `403 Forbidden` for non-super-admin users.
+- **Top 3 100% Real-Time Aggregated Platform KPIs**:
+  - **TOTAL REGISTERED COMPANIES**: Live count of all unique registered tenant organizations across MongoDB via aggregation.
+  - **TOTAL ACTIVE COMPANIES**: Real-time count of active, operational tenant organizations platform-wide (excludes suspended/deleted workspaces).
+  - **GLOBAL PLATFORM REVENUE**: Real-time cross-tenant MongoDB aggregation dynamically summing all 'Won / Closed' deals and settled 'Paid' invoices (e.g., `$619,213`) with zero static, mock, or duplicated data.
+- **Registered Companies Directory Table**:
+  - **Company ID & Workspace Name**: Unique tenant identifier with instant one-click copy and display name.
+  - **Admin Email**: Dynamically locates the user with the `Company Admin` role for each specific tenant.
+  - **Seats Used**: Progress-tracked seat utilization indicator (`seatsUsed / maxSeats`) with colored capacity thresholds.
+  - **Total Company Revenue**: Real-time dynamically calculated revenue sum of closed deals and paid invoices isolated per company.
+  - **Status & Actions**: Interactive `Active` / `Suspended` status indicators with "Suspend" and "Delete" actions guarded by confirmation dialogs.
+
+### 🧭 10. Dynamic Sidebar Notification Badges & Live Metrics
 - **Real-Time Tenant Metrics**: The sidebar notification badges dynamically query the backend (`GET /api/app/sidebar-stats`) to display real-time counts of actionable items isolated to the authenticated tenant.
 - **Active Leads Counter**: Displays the total count of ongoing sales opportunities in the pipeline, automatically filtering out won or closed deals (`stage !== 'Won / Closed'`).
 - **Pending Invoices Counter**: Tracks unpaid and pending billing balances (`status === 'Pending'`) requiring follow-up.
 - **Zero-Count Conditional Hiding**: If a metric count is `0`, the notification badge is cleanly omitted from the UI to avoid visual clutter.
 - **Event-Driven Synchronization**: Dispatches custom browser events (`crm_sidebar_stats_updated`) across invoice generation, status progressions (marking paid), lead stage changes, and deletions, instantly keeping the navigation badges in sync without requiring a page refresh.
 
-### 🔔 8. Dynamic Notification Bell System
+### 🔔 11. Dynamic Notification Bell System
 - **Database-Driven Alerts**: Notifications dropdown is completely free of static mock data and backed by a MongoDB `Notification` model with strict tenant isolation.
 - **Automated Workflow Triggers**: Automatically records notifications on critical team events:
   - When invitations are dispatched (`POST /api/team/invite` -> "Invite Sent: Invitation sent to [email]").
@@ -80,7 +132,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Dynamic Unread Badge**: Displays a vibrant red indicator badge with the exact unread count on the bell icon whenever `unreadCount > 0`.
 - **One-Click Read Status**: "Mark all as read" button sends a `PUT /api/notifications/mark-all-read` request, instantly switching unread cards from blue to white and clearing the bell badge without page reload.
 
-### 📊 9. Real-Time Executive Dashboard & Performance Analytics
+### 📊 12. Real-Time Executive Dashboard & Performance Analytics
 - **Zero Static Mock Data**: Fully replaced mock metrics with dynamic aggregations fetched via `GET /api/dashboard/stats` and strictly isolated by `req.user.tenantId`.
 - **Top Executive KPI Cards**:
   - **TOTAL REVENUE**: Real-time sum of `grandTotal` from paid invoices.
@@ -91,52 +143,19 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Leads by Pipeline Stage**: Aggregates active deals by stage with deal counts, estimated values, percentage yields, and total pipeline valuation (`totalPipelineValue`).
 - **Recent Activities Feed**: Aggregates the latest cross-entity records across Leads, Invoices, and Clients, sorted chronologically with category filtering (`all`, `deal`, `invoice`, `lead`, `client`).
 - **Dynamic Timeframe CSV Data Export**: "Export" button triggers `GET /api/dashboard/export?timeframe=...`, streaming a structured CSV report containing settled Invoices and converted Leads filtered dynamically by selected timeframes ("Last 7 Days", "This Month", "This Quarter", "Year to Date") with strict tenant isolation.
-- **Standard USD Currency Formatting**: Formats all monetary values uniformly (e.g., `$1,057,000`).
 
-### 🛡️ 10. Role-Based Registration & Tenant Provisioning
-- **Strict Role Separation**:
-  - **Company Admin**: Requires `companyName` on registration. Automatically provisions a new, isolated `Tenant` record with customized currency, fiscal year, and tax settings, generating a unique `tenantId` (e.g., `TNT-CORP-9402`).
-  - **Employee**: Does not create a new tenant or company partition. Provisions an `Employee` user record ready to be linked to an existing workspace via invitation tokens or administrator assignment.
-- **Conditional UI Rendering**: The registration form dynamically displays the "Company Name" input only when `role === 'Company Admin'`. When toggling to `Employee`, the input is hidden, and `companyName` is sent as `null` in the registration payload.
-- **Mongoose Role & Tenant Flexibility**: `User` model features explicit role enumeration (`'Company Admin'`, `'Employee'`) with flexible `tenantId` definitions, allowing employees to onboard without initial tenant attachment.
-- **Zero-Error Waiting Room (`PendingInviteScreen`)**: When an employee logs in without an assigned `tenantId`, `ShellLayout` conditionally intercepts rendering before any child components mount (`if (user && !user.tenantId) return <PendingInviteScreen />`). This completely prevents initial dashboard, sidebar, and notification API calls from firing with missing tenant context, guiding the employee to await their administrator's invite.
-
-### ⚡ 11. Scalable Server-Side Pagination & High-Performance Data Streaming
+### ⚡ 13. Scalable Server-Side Pagination
 - **MongoDB Skip/Limit Execution**: High-volume data models (`Leads`, `Clients`, and `Invoices`) utilize server-side `.skip((page - 1) * limit).limit(limit)` queries and `countDocuments()` rather than dumping entire datasets into memory.
 - **Standardized Pagination Payload**: The GET endpoints return metadata alongside records: `{ success: true, data: [...], pagination: { total, page, pages } }` with backward-compatible aliases.
 - **Frontend Pagination Controls**: Fully integrated Previous/Next pagination bars with "Page X of Y" displays across the Leads Pipeline Kanban, Client Directory, and Invoices billing ledger.
 
-### 👑 12. Super Admin Command Center & Global SaaS Telemetry
-- **Dedicated Root Governance Interface**: A dedicated `/super-admin` master command console featuring a distinctive deep indigo/violet cyber-console theme to differentiate it from standard tenant CRM workspaces.
-- **Strict Super Admin Protection (`requireSuperAdmin`)**: Frontend route guarded by `SuperAdminRoute` checking for `user.role === 'Super Admin'`. Backend endpoints strictly enforce `requireSuperAdmin` middleware, returning `403 Forbidden` for non-super-admin users.
-- **Top 3 100% Real-Time Aggregated Platform KPIs**:
-  - **TOTAL REGISTERED COMPANIES**: Live count of all unique registered tenant organizations across MongoDB.
-  - **TOTAL ACTIVE COMPANIES**: Real-time count of active, operational tenant organizations platform-wide (excludes suspended/deleted workspaces).
-  - **GLOBAL PLATFORM REVENUE**: Real-time cross-tenant MongoDB aggregation dynamically summing all 'Won / Closed' deals and settled 'Paid' invoices (e.g., `$619,213`) with zero mock or duplicated data.
-- **Registered Companies Directory Table**:
-  - **Company ID & Workspace Name**: Unique tenant identifier with instant one-click copy and display name.
-  - **Admin Email**: Dynamically locates the user with the `Company Admin` role for each specific tenant.
-  - **Seats Used**: Progress-tracked seat utilization indicator (`seatsUsed / maxSeats`) with colored capacity thresholds.
-  - **Total Company Revenue**: Sum of closed deals and paid invoices isolated per company.
-  - **Status & Actions**: Interactive `Active` / `Suspended` status indicators with "Suspend" and "Delete" actions guarded by a Confirmation Modal to prevent accidental operations.
-
-### 🔒 13. Record-Level Ownership & Granular Authorization
+### 🔒 14. Record-Level Ownership & Granular Authorization
 - **Granular Document Authorship**: `Lead`, `Client`, and `Invoice` schemas track document authorship via `createdBy` referencing `User`.
 - **Automatic Context Attachment**: Creation controllers (`POST /api/leads`, `/api/clients`, `/api/invoices`) automatically bind `req.body.createdBy = req.user._id`.
 - **Strict Ownership Mutation Guards**:
   - `Company Admin` can update or delete ANY record across their workspace.
   - `Employee` roles can ONLY update or delete records they personally created.
   - Unauthorized modifications or deletions immediately return `403 Forbidden` (`"Unauthorized. You can only modify your own records."`).
-- **Legacy Document Compatibility**: The `createdBy` field is configured with `required: false` to guarantee pre-existing database records remain fully updateable without Mongoose validation errors.
-
-### 🛡️ 14. Universal Data Protection & Deletion Confirmation Modals
-- **Zero Accidental Data Loss**: Completely eliminated brittle browser-native `window.confirm` dialogs in favor of modern, custom Tailwind CSS confirmation modals across all destructive touchpoints:
-  - **Leads Pipeline**: Deletion of sales opportunities from both the Kanban cards and the Lead Detail Drawer is protected by `ConfirmDeleteModal` with dynamic lead targeting.
-  - **Client Directory**: Deleting corporate accounts from the client directory requires explicit modal confirmation specifying the target company.
-  - **Invoices & Billing Hub**: Invoice removal from the billing ledger is guarded with target invoice number verification and preview drawer cleanup.
-  - **Super Admin Workspace Actions**: Suspending or deleting tenant workspaces requires multi-step modal authorization.
-  - **Team Settings**: Detaching team members requires explicit member removal confirmation.
-- **Accessible & Responsive UX**: Modals feature backdrop blur (`bg-slate-950/80`), keyboard `Escape` dismissal, focus isolation, loading states (`isDeleting` with Lucide spinner), and event-driven sidebar stat synchronizations (`crm_sidebar_stats_updated`).
 
 ---
 
@@ -176,10 +195,10 @@ CRM/
 │   │   │   ├── clientController.ts # Enterprise clients & dynamic deal/invoice counts
 │   │   │   ├── dashboardController.ts # Executive analytics, KPIs, pipeline & revenue aggregation
 │   │   │   ├── invoiceController.ts# Invoices CRUD, status updates & population
-│   │   │   ├── leadController.ts   # Leads pipeline & auto-conversion workflow
+│   │   │   ├── leadController.ts   # Leads pipeline & automated Won/Closed conversion workflow
 │   │   │   ├── notificationController.ts # Notification feeds and mark-all-read
 │   │   │   ├── superAdminController.ts # Global multi-tenant telemetry & platform governance
-│   │   │   ├── teamController.ts   # Member invites, listing, removal, acceptance
+│   │   │   ├── teamController.ts   # Member invites, strict 5-seat limit, removal, acceptance
 │   │   │   ├── tenantController.ts # Tenant stats, seat usage, workspace details
 │   │   │   └── userController.ts   # Profile updates, password modification, team members
 │   │   ├── middleware/
@@ -219,11 +238,15 @@ CRM/
 └── frontend/                       # React 19 & Tailwind CSS Client
     ├── src/
     │   ├── components/
-    │   │   ├── common/             # Modals, badges, buttons, spinners, pagination
+    │   │   ├── common/
+    │   │   │   ├── Badge.tsx               # Status badges
+    │   │   │   ├── ConfirmDeleteModal.tsx  # Universal deletion confirmation modal
+    │   │   │   ├── Drawer.tsx              # Slide-over detail panel
+    │   │   │   └── Modal.tsx               # Reusable dialog modal
     │   │   ├── layout/
     │   │   │   ├── Navbar.tsx      # Top bar with user dropdown and notifications
     │   │   │   ├── ShellLayout.tsx # Main authenticated dashboard shell
-    │   │   │   └── Sidebar.tsx     # Navigation & dynamic "Seats in use" widget
+    │   │   │   └── Sidebar.tsx     # Navigation, badges & interactive clickable "Seats in use" widget
     │   │   └── profile/
     │   │       └── ProfileSettings.tsx # Security, avatar, and password controls
     │   ├── context/
@@ -231,17 +254,17 @@ CRM/
     │   │   └── NotificationContext.tsx # Toast notification messaging system
     │   ├── pages/
     │   │   ├── auth/
-    │   │   │   ├── AcceptInvite.tsx # Onboarding page for invited teammates
+    │   │   │   ├── AcceptInvite.tsx # Onboarding page with post-activation /login redirection
     │   │   │   ├── ForgotPassword.tsx
     │   │   │   ├── Register.tsx
-    │   │   │   └── SignIn.tsx
-    │   │   ├── Clients.tsx         # Customer accounts with dynamic deal/invoice badges & pagination
+    │   │   │   └── SignIn.tsx       # Sign in with email pre-fill support from invite acceptance
+    │   │   ├── Clients.tsx         # Customer accounts with dynamic metrics & delete confirmation modal
     │   │   ├── Dashboard.tsx       # Executive analytics, KPI metrics, pipeline highlights
-    │   │   ├── Invoices.tsx        # Dynamic billing ledger, live KPI widgets, generator & pagination
-    │   │   ├── LeadsPipeline.tsx   # Kanban deals with auto-conversion to Clients & pagination
+    │   │   ├── Invoices.tsx        # Dynamic billing ledger, live KPI widgets, generator & delete modal
+    │   │   ├── LeadsPipeline.tsx   # Kanban deals with auto Won/Closed Client conversion & delete modal
     │   │   ├── PendingInviteScreen.tsx # Employee waiting room awaiting workspace invitation
-    │   │   ├── Settings.tsx        # Tenant governance, team table & seat management
-    │   │   └── SuperAdminDashboard.tsx # Platform master telemetry & tenant management console
+    │   │   ├── Settings.tsx        # Tenant governance, RBAC tab protection, team table & 5-seat management
+    │   │   └── SuperAdminDashboard.tsx # Real-time platform master telemetry & tenant management console
     │   ├── routes/
     │   │   ├── AppRoutes.tsx       # Application routing tree
     │   │   ├── PrivateRoute.tsx    # Protected route navigation guards
@@ -363,16 +386,16 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/team` | Private | Retrieve all active members and pending invitations with dynamic `closedRevenue` aggregation |
-| `POST` | `/api/team/invite` | Admin (`requireAdmin`) | Send email invitation with strict admin-only restriction and seat limit verification |
-| `DELETE` | `/api/team/:id` | Admin | Detach member (`$pull`) or cancel pending invite (with confirmation dialog & self-deletion guard) |
+| `POST` | `/api/team/invite` | Admin (`requireAdmin`) | Send email invitation with strict 5-seat capacity verification (`currentSeatCount >= 5` -> 403 Forbidden) |
+| `DELETE` | `/api/team/:id` | Admin | Detach member (`$pull`) or cancel pending invite (with confirmation modal & self-deletion guard) |
 | `DELETE` | `/api/team/remove/:id` | Admin | Alias for member detachment / invite cancellation |
 | `GET` | `/api/team/invitation/:token` | Public | Validate invite token and retrieve tenant metadata |
-| `POST` | `/api/team/accept-invite/:token` | Public | Accept invite (onboards new user or attaches workspace with capacity guard) |
+| `POST` | `/api/team/accept-invite/:token` | Public | Accept invite (onboards new user or attaches workspace with strict 5-seat capacity guard) |
 
 ### 🏢 Workspace & Seats (`/api/tenant`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/tenant/stats` | Private | Fetch real-time `usedSeats`, `maxSeats`, and active counts |
+| `GET` | `/api/tenant/stats` | Private | Fetch real-time `usedSeats`, `maxSeats` (5), and active counts |
 
 ### 🧭 App & Navigation Stats (`/api/app`)
 | Method | Endpoint | Access | Description |
@@ -397,7 +420,7 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | `GET` | `/api/leads` | Private | Fetch paginated leads for current tenant (`?page=1&limit=10`) |
 | `POST` | `/api/leads` | Private | Create a new lead opportunity with dynamically resolved assigned sales rep and country |
 | `PUT` | `/api/leads/:id` | Private | Update lead details, country, or stage (auto-converts to Client upon 'Won / Closed') |
-| `DELETE` | `/api/leads/:id` | Private | Delete a lead with strict tenant verification |
+| `DELETE` | `/api/leads/:id` | Private | Delete a lead with strict tenant verification (guarded by `ConfirmDeleteModal`) |
 
 ### 💼 Clients (`/api/clients`)
 | Method | Endpoint | Access | Description |
@@ -406,7 +429,7 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | `GET` | `/api/clients/:id/history` | Private | Fetch real transaction history & audit trail for a specific client |
 | `POST` | `/api/clients` | Private | Create a new enterprise client with dynamic location tracking |
 | `PUT` | `/api/clients/:id` | Private | Update client information, status, and country |
-| `DELETE` | `/api/clients/:id` | Private | Delete client record |
+| `DELETE` | `/api/clients/:id` | Private | Delete client record (guarded by `ConfirmDeleteModal`) |
 
 ### 🧾 Invoices & Billing (`/api/invoices`)
 | Method | Endpoint | Access | Description |
@@ -414,7 +437,7 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | `GET` | `/api/invoices` | Private | Fetch paginated invoices populated with client details (`?page=1&limit=10`) |
 | `POST` | `/api/invoices` | Private | Create a new itemized electronic invoice with dynamic 30-day due date |
 | `PUT` | `/api/invoices/:id/status` | Private | Update invoice status (`Paid`, `Pending`, `Overdue`) |
-| `DELETE` | `/api/invoices/:id` | Private | Delete invoice with tenant isolation verification |
+| `DELETE` | `/api/invoices/:id` | Private | Delete invoice with tenant isolation verification (guarded by `ConfirmDeleteModal`) |
 
 ### 👤 User Profile & Workspace Members (`/api/users`)
 | Method | Endpoint | Access | Description |
@@ -431,8 +454,8 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 ### 👑 Super Admin Platform Telemetry (`/api/super-admin`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/super-admin/dashboard-stats` | Super Admin (`requireSuperAdmin`) | Aggregated cross-tenant metrics (`totalCompanies`, `totalPlatformUsers`, `totalPlatformRevenue`) |
-| `GET` | `/api/super-admin/tenants` | Super Admin (`requireSuperAdmin`) | List all registered companies with admin emails, seat usage (`seatsUsed/maxSeats`), revenue, and status |
+| `GET` | `/api/super-admin/dashboard-stats` | Super Admin (`requireSuperAdmin`) | 100% Real-time dynamic metrics (`totalRegisteredCompanies`, `totalActiveCompanies`, `globalPlatformRevenue`) |
+| `GET` | `/api/super-admin/tenants` | Super Admin (`requireSuperAdmin`) | List all registered companies with admin emails, seat usage (`seatsUsed/maxSeats`), live calculated revenue, and status |
 | `PATCH` | `/api/super-admin/tenants/:id/status` | Super Admin (`requireSuperAdmin`) | Toggle or set company status between `Active` and `Suspended` |
 | `DELETE` | `/api/super-admin/tenants/:id` | Super Admin (`requireSuperAdmin`) | Remove a tenant organization from the platform |
 
@@ -442,10 +465,16 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 
 1. **Context Injection via Middleware**: Every private request passes through `protect`, which decodes the JWT and binds `req.user` and `req.tenantId`.
 2. **Tenant Boundary Enforcement (`tenantGuard`)**: Queries are restricted to the calling tenant's workspace using compound filters (`{ tenantId: tenantObjectId }`).
-3. **Role Validation & Admin Guards (`requireAdmin` / `authorizeRoles`)**: Critical governance operations—including member invitations (`requireAdmin`), cancelling invites, and modifying organization preferences—are strictly restricted to `Company Admin`. Non-admin roles attempting invitation endpoints receive `403 Forbidden: "Access Denied: Only Company Admins can perform this action."`.
-4. **Platform Super Admin Guard (`requireSuperAdmin`)**: The master console (`/super-admin`) and platform-wide telemetry APIs (`/api/super-admin/*`) are strictly protected by `requireSuperAdmin`, verifying that `req.user.role === 'Super Admin'`. Any unauthorized role receives `403 Forbidden: "Access Denied: Only Super Admins can access this resource."`.
-5. **Self-Deletion Prevention**: Administrators cannot delete or detach their own active workspace account from the team governance interface.
-6. **Record-Level Ownership Enforcement**: Schemas for `Lead`, `Client`, and `Invoice` require a `createdBy` reference to `User`. Company Admins can edit or delete any record in their workspace, while standard Employees can only modify or delete records they personally created (or are assigned to), returning `403 Forbidden` if unauthorized.
+3. **Role-Based Access Control (RBAC)**:
+   - Critical governance operations—including member invitations, member removal, and company configuration—are strictly restricted to `Company Admin` and `Super Admin`.
+   - Settings navigation completely hides the "Company Settings" tab from regular employees, with route interceptors enforcing the restriction.
+4. **Strict 5-Seat Limit Safeguard**:
+   - Backend checks both existing active user counts and pending invitation counts before permitting new invitations or member activations.
+   - Any attempt to exceed 5 members per tenant returns `403 Forbidden: "Seat limit reached. You cannot add more than 5 members."`.
+5. **Platform Super Admin Guard (`requireSuperAdmin`)**: The master console (`/super-admin`) and platform-wide telemetry APIs (`/api/super-admin/*`) are strictly protected by `requireSuperAdmin`, verifying that `req.user.role === 'Super Admin'`. Any unauthorized role receives `403 Forbidden: "Access Denied: Only Super Admins can access this resource."`.
+6. **Self-Deletion Prevention**: Administrators cannot delete or detach their own active workspace account from the team governance interface.
+7. **Record-Level Ownership Enforcement**: Schemas for `Lead`, `Client`, and `Invoice` require a `createdBy` reference to `User`. Company Admins can edit or delete any record in their workspace, while standard Employees can only modify or delete records they personally created (or are assigned to), returning `403 Forbidden` if unauthorized.
+8. **Universal Deletion Confirmation**: Every destructive delete operation across Leads, Clients, and Invoices is protected by a modal confirmation dialog to prevent accidental data loss.
 
 ---
 
