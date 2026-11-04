@@ -186,7 +186,56 @@ export const getSuperAdminTenants = async (
       }
     }
 
-    // 2. Aggregate details for each tenant
+    // 2. Pre-aggregate dynamic revenue across all tenants in real-time (Lead Won + Invoice Paid)
+    const [leadsByTenant, invoicesByTenant] = await Promise.all([
+      Lead.aggregate([
+        {
+          $match: {
+            stage: { $in: ['Won / Closed', 'Won'] },
+          },
+        },
+        {
+          $group: {
+            _id: '$tenantId',
+            totalRevenue: {
+              $sum: { $ifNull: ['$estimatedValue', { $ifNull: ['$value', 0] }] },
+            },
+          },
+        },
+      ]),
+      Invoice.aggregate([
+        {
+          $match: {
+            status: 'Paid',
+          },
+        },
+        {
+          $group: {
+            _id: '$tenantId',
+            totalRevenue: {
+              $sum: { $ifNull: ['$grandTotal', { $ifNull: ['$total', 0] }] },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    // Build real-time revenue lookup map covering both ObjectId and string tenant codes
+    const revenueMap = new Map<string, number>();
+    for (const item of leadsByTenant) {
+      if (item._id) {
+        const key = item._id.toString();
+        revenueMap.set(key, (revenueMap.get(key) || 0) + (item.totalRevenue || 0));
+      }
+    }
+    for (const item of invoicesByTenant) {
+      if (item._id) {
+        const key = item._id.toString();
+        revenueMap.set(key, (revenueMap.get(key) || 0) + (item.totalRevenue || 0));
+      }
+    }
+
+    // 3. Aggregate details for each tenant
     const formattedTenants = await Promise.all(
       tenants.map(async (tenant) => {
         const tenantMongoId = tenant._id;
@@ -229,41 +278,12 @@ export const getSuperAdminTenants = async (
 
         const maxSeats = (tenant as any).seatLimit ?? tenant.maxSeats ?? 25;
 
-        // Total Revenue: Sum of closed deals (Won / Closed leads or Paid Invoices) for that tenantId
-        const [closedLeadsAgg, paidInvoicesAgg] = await Promise.all([
-          Lead.aggregate([
-            {
-              $match: {
-                $or: [{ tenantId: tenantMongoId }, { tenantCode: tenantCode }],
-                stage: { $in: ['Won / Closed', 'Won'] },
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                total: { $sum: { $ifNull: ['$estimatedValue', { $ifNull: ['$value', 0] }] } },
-              },
-            },
-          ]),
-          Invoice.aggregate([
-            {
-              $match: {
-                tenantId: tenantMongoId,
-                status: 'Paid',
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                total: { $sum: { $ifNull: ['$grandTotal', { $ifNull: ['$total', 0] }] } },
-              },
-            },
-          ]),
-        ]);
-
-        const leadRev = closedLeadsAgg[0]?.total || 0;
-        const invRev = paidInvoicesAgg[0]?.total || 0;
-        const totalRevenue = leadRev > 0 && invRev > 0 ? leadRev + invRev : leadRev || invRev || 0;
+        // Real-time Dynamic Total Revenue: Match both ObjectId and tenantCode
+        const mongoIdStr = tenantMongoId.toString();
+        const tenantCodeStr = tenantCode;
+        const totalRevenue =
+          (revenueMap.get(mongoIdStr) || 0) +
+          (tenantCodeStr && tenantCodeStr !== mongoIdStr ? (revenueMap.get(tenantCodeStr) || 0) : 0);
 
         return {
           id: tenantMongoId.toString(),
