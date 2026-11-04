@@ -1,13 +1,15 @@
 import mongoose, { Document, Schema, Model, Types } from 'mongoose';
 
 export interface IClient extends Document {
-  tenantId: Types.ObjectId;
+  tenantId: any;
   tenantCode?: string;
   createdBy?: Types.ObjectId;
+  name?: string;
   contactName: string;
   companyName: string;
   email: string;
   phone?: string;
+  phoneNumber?: string;
   lifetimeValue: number;
   convertedAt: Date;
   status: 'Active' | 'Inactive' | 'Pending';
@@ -24,7 +26,7 @@ export interface IClient extends Document {
 const ClientSchema: Schema<IClient> = new Schema(
   {
     tenantId: {
-      type: Schema.Types.ObjectId,
+      type: Schema.Types.Mixed,
       ref: 'Tenant',
       required: [true, 'Tenant ID is required for multi-tenant data isolation'],
       index: true,
@@ -39,14 +41,19 @@ const ClientSchema: Schema<IClient> = new Schema(
       required: false,
       index: true,
     },
+    name: {
+      type: String,
+      trim: true,
+      default: 'Unknown Contact',
+    },
     contactName: {
       type: String,
-      required: [true, 'Contact name is required'],
+      default: 'Unknown Contact',
       trim: true,
     },
     companyName: {
       type: String,
-      required: [true, 'Company name is required'],
+      default: 'Unknown Company',
       trim: true,
     },
     email: {
@@ -57,6 +64,11 @@ const ClientSchema: Schema<IClient> = new Schema(
       index: true,
     },
     phone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    phoneNumber: {
       type: String,
       default: '',
       trim: true,

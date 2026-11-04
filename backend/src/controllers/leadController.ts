@@ -198,6 +198,7 @@ export const createLead = async (
           tenantId: tenantObjectId,
           tenantCode,
           createdBy: req.body.createdBy || req.user?._id,
+          name: chosenContactName,
           contactName: chosenContactName,
           companyName: chosenCompanyName,
           email: chosenEmail,
@@ -244,11 +245,8 @@ export const updateLead = async (
       return;
     }
 
-    // 1. Locate the lead verifying tenant isolation
-    const lead = await Lead.findOne({
-      _id: id,
-      tenantId: tenantObjectId,
-    });
+    // 1. Fetch the lead before updating it to verify tenant isolation and record ownership
+    const lead = await Lead.findById(id);
 
     if (!lead) {
       res.status(404).json({
@@ -275,7 +273,7 @@ export const updateLead = async (
       return;
     }
 
-    // Extract incoming updates
+    // 2. Normalize and prepare incoming updates for findByIdAndUpdate
     const {
       contactName,
       name,
@@ -286,7 +284,9 @@ export const updateLead = async (
       priority,
       email,
       phone,
+      phoneNumber,
       country,
+      city,
       notes,
       stage,
       tags,
@@ -295,89 +295,104 @@ export const updateLead = async (
       lastActivity,
     } = req.body;
 
-    if (contactName || name) lead.contactName = (contactName || name).trim();
-    if (companyName || company) lead.companyName = (companyName || company).trim();
-    if (email) lead.email = email.toLowerCase().trim();
-    if (phone !== undefined) lead.phone = phone.trim();
-    if (country !== undefined) lead.country = country.trim();
-    if (notes !== undefined) lead.notes = notes;
-    if (priority) lead.priority = priority as LeadPriority;
+    let targetStage: LeadStage = lead.stage;
+    if (stage === 'Won' || stage === 'Won / Closed') {
+      targetStage = 'Won / Closed';
+    } else if (['New Lead', 'Contacted', 'Proposal Sent', 'Negotiation'].includes(stage)) {
+      targetStage = stage as LeadStage;
+    }
+
+    const updateFields: any = {
+      ...req.body,
+      stage: targetStage,
+    };
+
+    if (contactName || name) updateFields.contactName = (contactName || name).trim();
+    if (companyName || company) updateFields.companyName = (companyName || company).trim();
+    if (email) updateFields.email = email.toLowerCase().trim();
+    if (phone !== undefined || phoneNumber !== undefined) {
+      updateFields.phone = (phone || phoneNumber || '').trim();
+    }
+    if (country !== undefined) updateFields.country = country.trim();
+    if (notes !== undefined) updateFields.notes = notes;
+    if (priority) updateFields.priority = priority as LeadPriority;
     if (estimatedValue !== undefined || value !== undefined) {
-      lead.estimatedValue = Number(estimatedValue ?? value) || 0;
+      updateFields.estimatedValue = Number(estimatedValue ?? value) || 0;
     }
     if (tags !== undefined) {
-      lead.tags = Array.isArray(tags) ? tags : typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()).filter(Boolean) : lead.tags;
+      updateFields.tags = Array.isArray(tags)
+        ? tags
+        : typeof tags === 'string'
+        ? tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : lead.tags;
     }
-    if (assignedTo) lead.assignedTo = assignedTo;
-    if (expectedClose !== undefined) lead.expectedClose = expectedClose;
-
-    // Normalize incoming stage
-    let isMovingToWon = false;
-    if (stage) {
-      let normalizedStage: LeadStage = lead.stage;
-      if (stage === 'Won' || stage === 'Won / Closed') {
-        normalizedStage = 'Won / Closed';
-        isMovingToWon = true;
-      } else if (['New Lead', 'Contacted', 'Proposal Sent', 'Negotiation'].includes(stage)) {
-        normalizedStage = stage as LeadStage;
-      }
-
-      if (lead.stage !== normalizedStage) {
-        lead.stage = normalizedStage;
-        lead.lastActivity = `Moved to ${normalizedStage} just now`;
-      }
+    if (assignedTo) updateFields.assignedTo = assignedTo;
+    if (expectedClose !== undefined) updateFields.expectedClose = expectedClose;
+    if (targetStage !== lead.stage) {
+      updateFields.lastActivity = `Moved to ${targetStage} just now`;
+    } else if (lastActivity) {
+      updateFields.lastActivity = lastActivity;
     }
 
-    if (lastActivity) {
-      lead.lastActivity = lastActivity;
+    // Perform findByIdAndUpdate for the lead
+    const updatedLead = await Lead.findByIdAndUpdate(
+      id,
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedLead) {
+      res.status(404).json({
+        success: false,
+        message: 'Failed to update lead record.',
+      });
+      return;
     }
 
-    await lead.save();
-
-    // 2. CRITICAL AUTO-CONVERSION WORKFLOW:
-    // If incoming stage is 'Won / Closed', check if Client already exists. If not, auto-convert!
+    // 3. Check the condition: if (req.body.stage === 'Won / Closed')
     let autoConvertedClient = null;
     let conversionMessage = 'Lead updated successfully';
 
-    if (isMovingToWon || lead.stage === 'Won / Closed') {
-      const existingClient = await Client.findOne({
-        tenantId: tenantObjectId,
-        $or: [
-          { email: lead.email },
-          { companyName: lead.companyName },
-        ],
-      });
+    if (req.body.stage === 'Won / Closed' || targetStage === 'Won / Closed') {
+      // 4. Wrap Client creation in try...catch block with console.error
+      try {
+        const clientTenantId = tenantObjectId || updatedLead.tenantId || req.user?.tenantId;
+        const clientEmail = (updatedLead.email || '').toLowerCase().trim() || `temp-${Date.now()}@no-email.com`;
+        const clientPhone = (updatedLead as any).phoneNumber || updatedLead.phone || phoneNumber || phone || '';
 
-      if (!existingClient) {
-        autoConvertedClient = await Client.create({
-          tenantId: tenantObjectId,
-          tenantCode,
-          createdBy: (lead as any).createdBy || req.user?._id,
-          contactName: lead.contactName,
-          companyName: lead.companyName,
-          email: lead.email,
-          phone: lead.phone || '',
-          country: lead.country || '',
-          lifetimeValue: lead.estimatedValue || 0,
-          convertedAt: new Date(),
+        // 5. Provide default fallback values for the Client schema to prevent Mongoose validation failures
+        const newClient = new Client({
+          contactName: updatedLead.contactName || 'Unknown Contact',
+          name: updatedLead.contactName || 'Unknown Contact',
+          companyName: updatedLead.companyName || 'Unknown Company',
+          company: updatedLead.companyName || 'Unknown Company',
+          email: clientEmail,
+          phoneNumber: clientPhone,
+          phone: clientPhone,
+          country: updatedLead.country || '',
+          city: (updatedLead as any).city || city || '',
+          lifetimeValue: updatedLead.estimatedValue || 0,
+          tenantId: clientTenantId,
+          tenantCode: tenantCode || updatedLead.tenantCode || req.user?.tenantId,
+          createdBy: req.user?._id || (updatedLead as any).createdBy,
           status: 'Active',
+          convertedAt: new Date(),
           lastContacted: `Converted from Lead on ${new Date().toLocaleDateString()}`,
         });
-        conversionMessage = `Deal won! ${lead.companyName} has been automatically converted to your Clients database.`;
-      } else {
-        // If client already exists, update their lifetime value by adding the new won deal
-        existingClient.lifetimeValue = (existingClient.lifetimeValue || 0) + (lead.estimatedValue || 0);
-        existingClient.lastContacted = `Deal closed on ${new Date().toLocaleDateString()}`;
-        await existingClient.save();
-        autoConvertedClient = existingClient;
-        conversionMessage = `Deal won! Client ${lead.companyName} lifetime value updated to $${existingClient.lifetimeValue.toLocaleString()}.`;
+
+        await newClient.save();
+        autoConvertedClient = newClient;
+        conversionMessage = `Deal won! ${updatedLead.companyName} has been automatically converted to your Clients database.`;
+        console.log(`[Auto-Convert Success]: New client created with ID ${newClient._id} for lead ${updatedLead._id}`);
+      } catch (error) {
+        console.error("Client Creation Failed:", error);
       }
     }
 
     res.status(200).json({
       success: true,
       message: conversionMessage,
-      lead: formatLeadResponse(lead),
+      lead: formatLeadResponse(updatedLead),
       convertedClient: autoConvertedClient,
       autoConverted: Boolean(autoConvertedClient),
     });

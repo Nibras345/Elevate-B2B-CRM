@@ -51,13 +51,19 @@ export const getClients = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { tenantObjectId } = await getTenantContext(req);
+    const { tenantObjectId, tenantCode } = await getTenantContext(req);
 
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 10;
     const skip = (page - 1) * limit;
 
-    const query = { tenantId: tenantObjectId };
+    const query = {
+      $or: [
+        { tenantId: tenantObjectId },
+        ...(tenantCode ? [{ tenantCode }] : []),
+        ...(req.user?.tenantId ? [{ tenantId: req.user.tenantId }, { tenantCode: req.user.tenantId }] : []),
+      ],
+    };
     const total = await Client.countDocuments(query);
 
     // Strict multi-tenant query isolation using lean() for performance
