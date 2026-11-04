@@ -34,6 +34,12 @@ export const AcceptInvite: React.FC = () => {
   const navigate = useNavigate();
   const { notify } = useNotification();
 
+  const toast = {
+    success: (msg: string) => notify(msg, 'success'),
+    error: (msg: string) => notify(msg, 'error'),
+    info: (msg: string) => notify(msg, 'info'),
+  };
+
   // Page initialization states
   const [isVerifying, setIsVerifying] = useState(true);
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
@@ -116,35 +122,13 @@ export const AcceptInvite: React.FC = () => {
 
       if (response.data.success) {
         setIsSuccess(true);
-        notify(
-          isExistingUser
-            ? 'Workspace joined successfully!'
-            : 'Account successfully activated! Welcome to the team.',
-          'success'
-        );
 
-        // If backend returned a JWT token and user info, store them
-        if (response.data.token) {
-          localStorage.setItem('nexcrm_jwt_token', response.data.token);
-          if (response.data.user) {
-            localStorage.setItem(
-              'nexcrm_user',
-              JSON.stringify({
-                id: response.data.user.id,
-                name: response.data.user.name,
-                fullName: response.data.user.name,
-                email: response.data.user.email,
-                role: response.data.user.role,
-                department: response.data.user.department,
-                tenantId: response.data.user.tenantId,
-                companyName: response.data.user.companyName,
-                avatar:
-                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-                joinedDate: 'Active Member',
-              })
-            );
-          }
-        }
+        // Clear any old stored credentials so the user logs in fresh
+        localStorage.removeItem('nexcrm_jwt_token');
+        localStorage.removeItem('nexcrm_user');
+
+        toast.success("Account setup complete. Please log in to continue.");
+        navigate('/login', { state: { email: invitation?.email } });
       } else {
         setFormError(response.data.message || 'Failed to activate account.');
       }
@@ -283,15 +267,15 @@ export const AcceptInvite: React.FC = () => {
                   <strong className="text-slate-800 dark:text-slate-200">
                     {invitation?.role}
                   </strong>
-                  . You're ready to explore your workspace!
+                  . Please log in to continue to your workspace.
                 </p>
               </div>
               <div className="pt-3">
                 <button
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate('/login', { state: { email: invitation?.email } })}
                   className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 transition-all shadow-md shadow-brand-500/25 cursor-pointer"
                 >
-                  <span>Launch Workspace Dashboard</span>
+                  <span>Proceed to Login</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>

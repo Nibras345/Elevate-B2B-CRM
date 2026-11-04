@@ -1,5 +1,5 @@
 import React, { useState, FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Building2,
   Lock,
@@ -15,7 +15,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 
 export const SignIn: React.FC = () => {
-  const [email, setEmail] = useState('');
+  const location = useLocation();
+  const [email, setEmail] = useState((location.state as any)?.email || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
