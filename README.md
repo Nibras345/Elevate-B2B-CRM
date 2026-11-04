@@ -120,6 +120,15 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - **Total Company Revenue**: Sum of closed deals and paid invoices isolated per company.
   - **Status & Actions**: Interactive `Active` / `Suspended` status indicators with "Suspend" and "Delete" capabilities.
 
+### 🔒 13. Record-Level Ownership & Granular Authorization
+- **Granular Document Authorship**: `Lead`, `Client`, and `Invoice` schemas track document authorship via `createdBy` referencing `User`.
+- **Automatic Context Attachment**: Creation controllers (`POST /api/leads`, `/api/clients`, `/api/invoices`) automatically bind `req.body.createdBy = req.user._id`.
+- **Strict Ownership Mutation Guards**:
+  - `Company Admin` can update or delete ANY record across their workspace.
+  - `Employee` roles can ONLY update or delete records they personally created.
+  - Unauthorized modifications or deletions immediately return `403 Forbidden` (`"Unauthorized. You can only modify your own records."`).
+- **Legacy Document Compatibility**: The `createdBy` field is configured with `required: false` to guarantee pre-existing database records remain fully updateable without Mongoose validation errors.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -146,6 +155,8 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 ```plaintext
 CRM/
 ├── backend/                        # Express.js & TypeScript Server
+│   ├── scripts/
+│   │   └── setSuperAdmin.js        # CLI utility to promote users to Super Admin
 │   ├── src/
 │   │   ├── config/
 │   │   │   ├── cloudinary.ts       # Cloudinary media configuration
@@ -158,20 +169,21 @@ CRM/
 │   │   │   ├── invoiceController.ts# Invoices CRUD, status updates & population
 │   │   │   ├── leadController.ts   # Leads pipeline & auto-conversion workflow
 │   │   │   ├── notificationController.ts # Notification feeds and mark-all-read
+│   │   │   ├── superAdminController.ts # Global multi-tenant telemetry & platform governance
 │   │   │   ├── teamController.ts   # Member invites, listing, removal, acceptance
 │   │   │   ├── tenantController.ts # Tenant stats, seat usage, workspace details
 │   │   │   └── userController.ts   # Profile updates, password modification, team members
 │   │   ├── middleware/
-│   │   │   ├── authMiddleware.ts   # JWT verification, tenant isolation guard, RBAC
+│   │   │   ├── authMiddleware.ts   # JWT verification, tenant isolation guard, requireAdmin, requireSuperAdmin
 │   │   │   ├── errorMiddleware.ts  # Centralized error handler
 │   │   │   └── uploadMiddleware.ts # Multer Cloudinary storage for profile pictures
 │   │   ├── models/
-│   │   │   ├── Client.ts           # Enterprise client schema with lifetime value
+│   │   │   ├── Client.ts           # Enterprise client schema with lifetime value & createdBy
 │   │   │   ├── Invitation.ts       # Tokenized workspace invitation schema
-│   │   │   ├── Invoice.ts          # Itemized invoice schema with status & client ref
-│   │   │   ├── Lead.ts             # Kanban lead schema with stage progression
+│   │   │   ├── Invoice.ts          # Itemized invoice schema with status, client ref & createdBy
+│   │   │   ├── Lead.ts             # Kanban lead schema with stage progression & createdBy
 │   │   │   ├── Notification.ts     # Multi-tenant activity notification schema
-│   │   │   ├── Tenant.ts           # Company profile, branding, maxSeats schema
+│   │   │   ├── Tenant.ts           # Company profile, branding, status, maxSeats schema
 │   │   │   └── User.ts             # User credentials, roles, workspace memberships
 │   │   ├── routes/
 │   │   │   ├── appRoutes.ts        # /api/app endpoints (sidebar badge metrics)
@@ -181,6 +193,7 @@ CRM/
 │   │   │   ├── invoiceRoutes.ts    # /api/invoices endpoints
 │   │   │   ├── leadRoutes.ts       # /api/leads endpoints
 │   │   │   ├── notificationRoutes.ts # /api/notifications endpoints
+│   │   │   ├── superAdminRoutes.ts # /api/super-admin endpoints (platform stats & companies)
 │   │   │   ├── teamRoutes.ts       # /api/team endpoints
 │   │   │   ├── tenantRoutes.ts     # /api/tenant endpoints
 │   │   │   └── userRoutes.ts       # /api/users endpoints
@@ -197,7 +210,7 @@ CRM/
 └── frontend/                       # React 19 & Tailwind CSS Client
     ├── src/
     │   ├── components/
-    │   │   ├── common/             # Modals, badges, buttons, spinners
+    │   │   ├── common/             # Modals, badges, buttons, spinners, pagination
     │   │   ├── layout/
     │   │   │   ├── Navbar.tsx      # Top bar with user dropdown and notifications
     │   │   │   ├── ShellLayout.tsx # Main authenticated dashboard shell
@@ -213,15 +226,17 @@ CRM/
     │   │   │   ├── ForgotPassword.tsx
     │   │   │   ├── Register.tsx
     │   │   │   └── SignIn.tsx
-    │   │   ├── Clients.tsx         # Customer accounts with dynamic deal/invoice badges
+    │   │   ├── Clients.tsx         # Customer accounts with dynamic deal/invoice badges & pagination
     │   │   ├── Dashboard.tsx       # Executive analytics, KPI metrics, pipeline highlights
-    │   │   ├── Invoices.tsx        # Dynamic billing ledger, live KPI widgets, generator
-    │   │   ├── LeadsPipeline.tsx   # Kanban deals with auto-conversion to Clients
+    │   │   ├── Invoices.tsx        # Dynamic billing ledger, live KPI widgets, generator & pagination
+    │   │   ├── LeadsPipeline.tsx   # Kanban deals with auto-conversion to Clients & pagination
     │   │   ├── PendingInviteScreen.tsx # Employee waiting room awaiting workspace invitation
-    │   │   └── Settings.tsx        # Tenant governance, team table & seat management
+    │   │   ├── Settings.tsx        # Tenant governance, team table & seat management
+    │   │   └── SuperAdminDashboard.tsx # Platform master telemetry & tenant management console
     │   ├── routes/
     │   │   ├── AppRoutes.tsx       # Application routing tree
-    │   │   └── PrivateRoute.tsx    # Protected route navigation guards
+    │   │   ├── PrivateRoute.tsx    # Protected route navigation guards
+    │   │   └── SuperAdminRoute.tsx # Super Admin role guard (/super-admin)
     │   ├── types/
     │   │   └── index.ts            # Client TypeScript interfaces
     │   ├── App.tsx
@@ -309,6 +324,19 @@ cd Elevate-B2B-CRM
    npm run dev
    ```
    *The frontend client will be available at `http://localhost:5173`.*
+
+---
+
+### Step 4: Super Admin Console Access (Optional)
+
+To access the platform-wide Super Admin Console at `http://localhost:5173/super-admin`:
+
+1. Promote an existing user to the `Super Admin` role via CLI:
+   ```bash
+   node backend/scripts/setSuperAdmin.js your_email@example.com
+   ```
+2. Sign in at `http://localhost:5173/login`.
+3. Open `http://localhost:5173/super-admin` or click the **"Super Admin"** navigation link with the `CONSOLE` badge in the sidebar.
 
 ---
 
