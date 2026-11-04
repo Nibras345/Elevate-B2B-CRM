@@ -168,6 +168,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null,
       isActiveMatch: (pathname: string, search: string) => pathname === '/settings' && !search.includes('tab=team'),
     },
+    ...(user?.role === 'Super Admin'
+      ? [
+          {
+            name: 'Super Admin',
+            path: '/super-admin',
+            icon: ShieldCheck,
+            badge: 'CONSOLE',
+          },
+        ]
+      : []),
   ];
 
   return (

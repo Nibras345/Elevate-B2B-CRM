@@ -11,6 +11,7 @@ export interface ITenant extends Document {
   invoiceTerms: string;
   address?: string;
   website?: string;
+  status?: 'Active' | 'Suspended';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +63,11 @@ const TenantSchema: Schema<ITenant> = new Schema(
     website: {
       type: String,
       default: '',
+    },
+    status: {
+      type: String,
+      enum: ['Active', 'Suspended'],
+      default: 'Active',
     },
   },
   {

@@ -50,7 +50,7 @@ export const protect = async (
     // Resolve active tenant and role for this session
     const activeTenantId = decoded.tenantId || currentUser.tenantId;
     const activeWorkspace = currentUser.workspaces?.find((w) => w.tenantId === activeTenantId);
-    const activeRole = activeWorkspace?.role || decoded.role || currentUser.role;
+    const activeRole = currentUser.role === 'Super Admin' ? 'Super Admin' : (activeWorkspace?.role || decoded.role || currentUser.role);
     const activeDept = activeWorkspace?.department || currentUser.department;
 
     // Attach user and tenant info to request
@@ -109,6 +109,21 @@ export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction
     res.status(403).json({
       success: false,
       message: 'Access Denied: Only Company Admins can perform this action.',
+    });
+    return;
+  }
+  next();
+};
+
+/**
+ * Super Admin Access Guard
+ * Restricts route access strictly to Super Admin
+ */
+export const requireSuperAdmin = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  if (!req.user || req.user.role !== 'Super Admin') {
+    res.status(403).json({
+      success: false,
+      message: 'Access Denied: Only Super Admins can access this resource.',
     });
     return;
   }

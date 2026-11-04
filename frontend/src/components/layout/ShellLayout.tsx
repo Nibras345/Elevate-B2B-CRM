@@ -36,7 +36,7 @@ export const ShellLayout: React.FC = () => {
 
   // Waiting Room Guard: If user has no assigned tenantId, skip rendering full CRM layout.
   // This halts all child useEffect API calls that would trigger 400 Bad Request errors.
-  if (user && !user.tenantId) {
+  if (user && !user.tenantId && user.role !== 'Super Admin') {
     return <PendingInviteScreen />;
   }
 

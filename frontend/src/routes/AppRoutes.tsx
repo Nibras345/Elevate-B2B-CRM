@@ -11,6 +11,8 @@ import { LeadsPipeline } from '../pages/LeadsPipeline';
 import { Clients } from '../pages/Clients';
 import { Invoices } from '../pages/Invoices';
 import { Settings } from '../pages/Settings';
+import { SuperAdminDashboard } from '../pages/SuperAdminDashboard';
+import { SuperAdminRoute } from './SuperAdminRoute';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -20,6 +22,11 @@ export const AppRoutes: React.FC = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/invite/accept/:token" element={<AcceptInvite />} />
+
+      {/* Protected Super Admin Console */}
+      <Route element={<SuperAdminRoute />}>
+        <Route path="/super-admin" element={<SuperAdminDashboard />} />
+      </Route>
 
       {/* Protected Multi-Tenant CRM Routes */}
       <Route element={<PrivateRoute />}>

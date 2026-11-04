@@ -106,6 +106,20 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Standardized Pagination Payload**: The GET endpoints return metadata alongside records: `{ success: true, data: [...], pagination: { total, page, pages } }` with backward-compatible aliases.
 - **Frontend Pagination Controls**: Fully integrated Previous/Next pagination bars with "Page X of Y" displays across the Leads Pipeline Kanban, Client Directory, and Invoices billing ledger.
 
+### 👑 12. Super Admin Command Center & Global SaaS Telemetry
+- **Dedicated Root Governance Interface**: A dedicated `/super-admin` master command console featuring a distinctive deep indigo/violet cyber-console theme to differentiate it from standard tenant CRM workspaces.
+- **Strict Super Admin Protection (`requireSuperAdmin`)**: Frontend route guarded by `SuperAdminRoute` checking for `user.role === 'Super Admin'`. Backend endpoints strictly enforce `requireSuperAdmin` middleware, returning `403 Forbidden` for non-super-admin users.
+- **Top 3 Aggregated Platform KPIs**:
+  - **Total Registered Companies**: Live count of all active tenant organizations across MongoDB.
+  - **Total Active Seats / Users**: Global count of provisioned user accounts platform-wide.
+  - **Global Platform Revenue**: Cross-tenant MongoDB aggregation summing all 'Won / Closed' deals and 'Paid' invoices.
+- **Registered Companies Directory Table**:
+  - **Company ID & Workspace Name**: Unique tenant identifier with instant one-click copy and display name.
+  - **Admin Email**: Dynamically locates the user with the `Company Admin` role for each specific tenant.
+  - **Seats Used**: Progress-tracked seat utilization indicator (`seatsUsed / maxSeats`) with colored capacity thresholds.
+  - **Total Company Revenue**: Sum of closed deals and paid invoices isolated per company.
+  - **Status & Actions**: Interactive `Active` / `Suspended` status indicators with "Suspend" and "Delete" capabilities.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -377,6 +391,14 @@ cd Elevate-B2B-CRM
 | `POST` | `/api/users/verify-otp` | Public | Verify 6-digit recovery OTP validity and expiration |
 | `POST` | `/api/users/reset-password` | Public | Reset password using verified recovery OTP |
 
+### 👑 Super Admin Platform Telemetry (`/api/super-admin`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/super-admin/dashboard-stats` | Super Admin (`requireSuperAdmin`) | Aggregated cross-tenant metrics (`totalCompanies`, `totalPlatformUsers`, `totalPlatformRevenue`) |
+| `GET` | `/api/super-admin/tenants` | Super Admin (`requireSuperAdmin`) | List all registered companies with admin emails, seat usage (`seatsUsed/maxSeats`), revenue, and status |
+| `PATCH` | `/api/super-admin/tenants/:id/status` | Super Admin (`requireSuperAdmin`) | Toggle or set company status between `Active` and `Suspended` |
+| `DELETE` | `/api/super-admin/tenants/:id` | Super Admin (`requireSuperAdmin`) | Remove a tenant organization from the platform |
+
 ---
 
 ## 🛡️ Multi-Tenant Security & Isolation Standards
@@ -384,8 +406,9 @@ cd Elevate-B2B-CRM
 1. **Context Injection via Middleware**: Every private request passes through `protect`, which decodes the JWT and binds `req.user` and `req.tenantId`.
 2. **Tenant Boundary Enforcement (`tenantGuard`)**: Queries are restricted to the calling tenant's workspace using compound filters (`{ tenantId: tenantObjectId }`).
 3. **Role Validation & Admin Guards (`requireAdmin` / `authorizeRoles`)**: Critical governance operations—including member invitations (`requireAdmin`), cancelling invites, and modifying organization preferences—are strictly restricted to `Company Admin`. Non-admin roles attempting invitation endpoints receive `403 Forbidden: "Access Denied: Only Company Admins can perform this action."`.
-4. **Self-Deletion Prevention**: Administrators cannot delete or detach their own active workspace account from the team governance interface.
-5. **Record-Level Ownership Enforcement**: Schemas for `Lead`, `Client`, and `Invoice` require a `createdBy` reference to `User`. Company Admins can edit or delete any record in their workspace, while standard Employees can only modify or delete records they personally created (or are assigned to), returning `403 Forbidden` if unauthorized.
+4. **Platform Super Admin Guard (`requireSuperAdmin`)**: The master console (`/super-admin`) and platform-wide telemetry APIs (`/api/super-admin/*`) are strictly protected by `requireSuperAdmin`, verifying that `req.user.role === 'Super Admin'`. Any unauthorized role receives `403 Forbidden: "Access Denied: Only Super Admins can access this resource."`.
+5. **Self-Deletion Prevention**: Administrators cannot delete or detach their own active workspace account from the team governance interface.
+6. **Record-Level Ownership Enforcement**: Schemas for `Lead`, `Client`, and `Invoice` require a `createdBy` reference to `User`. Company Admins can edit or delete any record in their workspace, while standard Employees can only modify or delete records they personally created (or are assigned to), returning `403 Forbidden` if unauthorized.
 
 ---
 

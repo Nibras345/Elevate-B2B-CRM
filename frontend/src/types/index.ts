@@ -1,4 +1,25 @@
-export type Role = 'Company Admin' | 'Employee' | 'Sales Agent' | 'Support';
+export type Role = 'Company Admin' | 'Employee' | 'Sales Agent' | 'Support' | 'Super Admin';
+
+export interface SuperAdminStats {
+  totalCompanies: number;
+  totalPlatformUsers: number;
+  totalPlatformRevenue: number;
+}
+
+export interface SuperAdminTenant {
+  id: string;
+  _id: string;
+  companyName: string;
+  name: string;
+  tenantId: string;
+  adminEmail: string;
+  seatsUsed: number;
+  maxSeats: number;
+  seatsDisplay: string;
+  totalRevenue: number;
+  status: 'Active' | 'Suspended';
+  createdAt?: string;
+}
 
 export type PipelineStage = 'New Lead' | 'Contacted' | 'Proposal Sent' | 'Negotiation' | 'Won / Closed' | 'Won';
 
