@@ -37,6 +37,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/clients" element={<Clients />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/team-members" element={<Navigate to="/settings?tab=team" replace />} />
         </Route>
       </Route>
 

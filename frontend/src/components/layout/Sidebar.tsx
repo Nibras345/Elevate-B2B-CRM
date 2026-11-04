@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   LayoutDashboard,
@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Building2,
   Sparkles,
+  ArrowUpRight,
   LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -40,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { user, tenantSettings } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Dynamic Workspace Seat Statistics
   const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
@@ -297,19 +299,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                 Multi-tenant isolation active. Unlimited pipelines.
               </p>
-              <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 font-medium pt-2 border-t border-slate-200/60 dark:border-slate-700/40">
+              {/* Clickable Seats in use row */}
+              <div
+                onClick={() => {
+                  setIsMobileOpen(false);
+                  navigate('/team-members');
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    setIsMobileOpen(false);
+                    navigate('/team-members');
+                  }
+                }}
+                title="View team members and seat assignments"
+                className="mt-2.5 flex items-center justify-between text-[11px] font-medium pt-2 border-t border-slate-200/60 dark:border-slate-700/40 text-slate-600 dark:text-slate-300 cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/80 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded-lg px-2 py-1 -mx-1 group"
+              >
                 <span>Seats in use</span>
-                <span className="font-semibold text-brand-600 dark:text-brand-400">
-                  {isLoadingSeats ? '...' : `${seatStats.usedSeats} / ${seatStats.maxSeats}`}
+                <span className="inline-flex items-center gap-1 font-semibold text-brand-600 dark:text-brand-400 group-hover:underline">
+                  <span>{isLoadingSeats ? '...' : `${seatStats.usedSeats} / ${seatStats.maxSeats}`}</span>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-brand-500 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </span>
               </div>
             </div>
           ) : (
             <div
-              className="flex justify-center p-2"
-              title={`Enterprise Multi-Tenant Active (${seatStats.usedSeats} / ${seatStats.maxSeats} seats)`}
+              onClick={() => navigate('/team-members')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  navigate('/team-members');
+                }
+              }}
+              className="flex justify-center p-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors group"
+              title={`Enterprise Multi-Tenant Active (${seatStats.usedSeats} / ${seatStats.maxSeats} seats) - Click to manage team members`}
             >
-              <ShieldCheck className="w-5 h-5 text-emerald-500" />
+              <ShieldCheck className="w-5 h-5 text-emerald-500 group-hover:scale-110 transition-transform" />
             </div>
           )}
         </div>
