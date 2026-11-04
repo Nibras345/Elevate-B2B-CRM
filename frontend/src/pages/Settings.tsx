@@ -114,7 +114,7 @@ export const Settings: React.FC = () => {
   };
 
   // Workspace Seat Statistics State
-  const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
+  const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 5 });
   const [isSeatStatsLoading, setIsSeatStatsLoading] = useState<boolean>(false);
 
   const fetchSeatStats = async () => {
@@ -132,7 +132,7 @@ export const Settings: React.FC = () => {
       if (response.data.success) {
         setSeatStats({
           usedSeats: Number(response.data.usedSeats) || 0,
-          maxSeats: Number(response.data.maxSeats) || 25,
+          maxSeats: Number(response.data.maxSeats) || 5,
         });
       }
     } catch (err) {
@@ -144,8 +144,8 @@ export const Settings: React.FC = () => {
 
   // Local members alias and dynamic seat limit calculations
   const members = team;
-  const seatLimit = (tenantSettings as any)?.seatLimit ?? seatStats.maxSeats ?? 25;
-  const isSeatLimitReached = members.length >= 25 || members.length >= seatLimit || seatStats.usedSeats >= seatLimit;
+  const seatLimit = (tenantSettings as any)?.seatLimit ?? seatStats.maxSeats ?? 5;
+  const isSeatLimitReached = members.length >= 5 || members.length >= seatLimit || seatStats.usedSeats >= seatLimit;
 
   // Fetch Team Members from Route 2: GET /api/team
   const fetchTeamMembers = async () => {
@@ -573,18 +573,18 @@ export const Settings: React.FC = () => {
                       }
                       setIsInviteModalOpen(true);
                     }}
-                    disabled={members.length >= 25 || isSeatLimitReached}
+                    disabled={members.length >= 5 || isSeatLimitReached}
                     className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-md transition-all ${
-                      members.length >= 25 || isSeatLimitReached
+                      members.length >= 5 || isSeatLimitReached
                         ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border border-slate-300 dark:border-slate-700'
                         : 'bg-brand-600 hover:bg-brand-500 text-white shadow-brand-500/20 cursor-pointer'
                     }`}
-                    title={members.length >= 25 || isSeatLimitReached ? 'Maximum seats reached' : undefined}
+                    title={members.length >= 5 || isSeatLimitReached ? 'Maximum seats reached' : undefined}
                   >
                     <Plus className="w-4 h-4" />
                     <span>+ Invite User</span>
                   </button>
-                  {(members.length >= 25 || isSeatLimitReached) && (
+                  {(members.length >= 5 || isSeatLimitReached) && (
                     <div className="absolute right-0 top-full mt-2 px-2.5 py-1 bg-slate-900 text-white text-[11px] rounded-md shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none">
                       Maximum seats reached
                     </div>

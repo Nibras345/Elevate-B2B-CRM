@@ -54,7 +54,7 @@ export const getTenantContext = async (req: AuthRequest): Promise<TenantContext>
     currency: 'USD ($)',
     defaultTaxRate: 10,
     invoiceTerms: 'Net 30 Days',
-    maxSeats: 25,
+    maxSeats: 5,
   });
 
   return {

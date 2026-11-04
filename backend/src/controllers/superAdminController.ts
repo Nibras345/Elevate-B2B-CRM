@@ -178,7 +178,7 @@ export const getSuperAdminTenants = async (
           name: (sampleUser as any)?.companyName || (sampleUser?.name ? `${sampleUser.name}'s Org` : `Workspace ${tId}`),
           tenantId: tId,
           currency: 'USD ($)',
-          maxSeats: 25,
+          maxSeats: 5,
           status: 'Active',
         });
         tenants.push(autoTenant.toObject() as any);
@@ -276,7 +276,7 @@ export const getSuperAdminTenants = async (
           isActive: { $ne: false },
         });
 
-        const maxSeats = (tenant as any).seatLimit ?? tenant.maxSeats ?? 25;
+        const maxSeats = (tenant as any).seatLimit ?? tenant.maxSeats ?? 5;
 
         // Real-time Dynamic Total Revenue: Match both ObjectId and tenantCode
         const mongoIdStr = tenantMongoId.toString();

@@ -24,10 +24,10 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Strict Role & Self-Deletion Guards**: Prevents Company Admins from deleting their own active accounts (`400 Bad Request`), restricts removal rights exclusively to admins, ensures strict `tenantId` isolation, and fully supports all system roles including `Support`.
 
 ### 👥 2. Dynamic Seat Management & Governance
-- **Configurable Capacity**: Tenant workspaces feature dynamic seat thresholds (`maxSeats`, default: 25).
+- **Configurable Capacity**: Tenant workspaces feature dynamic seat thresholds (`maxSeats`, default: 5).
 - **Real-Time Seat Aggregation**: The `GET /api/tenant/stats` endpoint calculates `usedSeats` as `(Active Users Count) + (Pending Invites Count)` in real time.
 - **Strict Backend Seat Limit Enforcement**: Prevents workspace overflow by securely validating existing member counts and pending invitations prior to creating user or invite records (`403 Forbidden: "Seat limit reached. Please upgrade your workspace plan to add more team members."`). Dynamically checks `tenant.seatLimit` or `tenant.maxSeats`.
-- **Frontend Guard & UI Tooltip**: Catches 403 API seat responses in the invite modal `try/catch` and surfaces a prominent warning toast ("Seat limit of 25 reached. Upgrade plan required."). Conditionally disables the "+ Invite User" button when local `members.length >= 25` with an interactive "Maximum seats reached" tooltip.
+- **Frontend Guard & UI Tooltip**: Catches 403 API seat responses in the invite modal `try/catch` and surfaces a prominent warning toast ("Seat limit of 5 reached. Upgrade plan required."). Conditionally disables the "+ Invite User" button when local `members.length >= 5` with an interactive "Maximum seats reached" tooltip.
 - **Instant Client-Side Sync**: Employs global browser event dispatching (`crm_seat_stats_updated`) to update the Sidebar subscription card and Team settings in real-time.
 - **Dynamic Closed Revenue Aggregation**: Team members table calculates actual won deal totals per user via a multi-stage MongoDB aggregation pipeline (`$lookup` across tenant leads, `$filter` for `Won / Closed` stage, and `$reduce` summing `estimatedValue`), projecting real-time revenue instead of static $0 placeholders.
 

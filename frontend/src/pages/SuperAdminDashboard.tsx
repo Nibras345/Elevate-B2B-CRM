@@ -418,7 +418,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   filteredTenants.map((tenant) => {
                     const percentUsed = Math.min(
                       100,
-                      Math.round(((tenant.seatsUsed || 0) / (tenant.maxSeats || 25)) * 100)
+                      Math.round(((tenant.seatsUsed || 0) / (tenant.maxSeats || 5)) * 100)
                     );
 
                     return (

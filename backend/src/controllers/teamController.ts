@@ -75,7 +75,7 @@ export const inviteTeamMember = async (
 
     // 2. Enforce Workspace Seat Limit
     const tenantDoc = await Tenant.findOne({ tenantId: currentTenantId });
-    const seatLimit = (tenantDoc as any)?.seatLimit ?? tenantDoc?.maxSeats ?? 25;
+    const seatLimit = (tenantDoc as any)?.seatLimit ?? tenantDoc?.maxSeats ?? 5;
 
     // Count existing members in workspace
     const currentSeatCount = await User.countDocuments({
@@ -550,7 +550,7 @@ export const acceptInvite = async (
     }
 
     // 3b. Verify Workspace Seat Limit has not been exceeded
-    const seatLimit = (tenantDoc as any)?.seatLimit ?? tenantDoc?.maxSeats ?? 25;
+    const seatLimit = (tenantDoc as any)?.seatLimit ?? tenantDoc?.maxSeats ?? 5;
     const currentSeatCount = await User.countDocuments({
       $or: [
         { tenantId: invitation.tenantId },

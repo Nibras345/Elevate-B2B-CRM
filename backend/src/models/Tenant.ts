@@ -33,7 +33,7 @@ const TenantSchema: Schema<ITenant> = new Schema(
     },
     maxSeats: {
       type: Number,
-      default: 25,
+      default: 5,
       min: [1, 'A tenant must have at least 1 seat'],
     },
     logoUrl: {

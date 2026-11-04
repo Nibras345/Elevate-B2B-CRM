@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navigate = useNavigate();
 
   // Dynamic Workspace Seat Statistics
-  const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 25 });
+  const [seatStats, setSeatStats] = useState({ usedSeats: 0, maxSeats: 5 });
   const [isLoadingSeats, setIsLoadingSeats] = useState<boolean>(false);
 
   // Dynamic Sidebar Notification Statistics (Active Leads & Pending Invoices)
@@ -66,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         if (response.data.success) {
           setSeatStats({
             usedSeats: Number(response.data.usedSeats) || 0,
-            maxSeats: Number(response.data.maxSeats) || 25,
+            maxSeats: Number(response.data.maxSeats) || 5,
           });
         }
       } catch (error) {

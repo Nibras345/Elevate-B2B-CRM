@@ -49,7 +49,7 @@ export const getTenantStats = async (
 
     // 5. Fetch tenant configuration for maxSeats / seatLimit
     const tenant = await Tenant.findOne({ tenantId: currentTenantId });
-    const maxSeats = (tenant as any)?.seatLimit ?? tenant?.maxSeats ?? 25;
+    const maxSeats = (tenant as any)?.seatLimit ?? tenant?.maxSeats ?? 5;
 
     // 6. Return standard JSON response
     res.status(200).json({
