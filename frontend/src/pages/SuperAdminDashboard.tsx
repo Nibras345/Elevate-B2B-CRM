@@ -145,6 +145,20 @@ export const SuperAdminDashboard: React.FC = () => {
     setIsActionModalOpen(true);
   };
 
+  // Open Delete Confirmation Modal specifically
+  const handleOpenDeleteModal = (company: SuperAdminTenant) => {
+    setSelectedCompany(company);
+    setActionType('delete');
+    setIsActionModalOpen(true);
+  };
+
+  // Open Suspend / Activate Confirmation Modal specifically
+  const handleOpenSuspendModal = (company: SuperAdminTenant) => {
+    setSelectedCompany(company);
+    setActionType('suspend');
+    setIsActionModalOpen(true);
+  };
+
   const handleCloseActionModal = () => {
     if (isSubmittingAction) return;
     setIsActionModalOpen(false);
@@ -158,7 +172,7 @@ export const SuperAdminDashboard: React.FC = () => {
     try {
       setIsSubmittingAction(true);
       const token = localStorage.getItem('nexcrm_jwt_token');
-      const companyId = selectedCompany.id || selectedCompany._id;
+      const companyId = selectedCompany.tenantId || selectedCompany.id || selectedCompany._id;
 
       if (actionType === 'delete') {
         const response = await axios.delete(`/api/super-admin/tenants/${companyId}`, {
@@ -166,12 +180,15 @@ export const SuperAdminDashboard: React.FC = () => {
         });
 
         if (response.data?.success) {
-          setTenants((prev) => prev.filter((t) => (t.id || t._id) !== companyId));
+          setTenants((prev) =>
+            prev.filter((t) => (t.id || t._id) !== companyId && t.tenantId !== companyId)
+          );
           notify(
-            `Workspace "${selectedCompany.name || selectedCompany.companyName}" successfully deleted.`,
+            response.data?.message ||
+              `Workspace "${selectedCompany.name || selectedCompany.companyName}" successfully deleted.`,
             'success'
           );
-          // Refresh aggregate KPI stats
+          // Refresh aggregate KPI stats and directory
           fetchSuperAdminData(true);
         }
       } else if (actionType === 'suspend') {
@@ -185,7 +202,9 @@ export const SuperAdminDashboard: React.FC = () => {
         if (response.data?.success) {
           setTenants((prev) =>
             prev.map((t) =>
-              (t.id || t._id) === companyId ? { ...t, status: nextStatus } : t
+              (t.id || t._id) === companyId || t.tenantId === companyId
+                ? { ...t, status: nextStatus }
+                : t
             )
           );
           notify(
@@ -658,12 +677,9 @@ export const SuperAdminDashboard: React.FC = () => {
                           <div className="flex items-center justify-end gap-2">
                             {/* Suspend / Activate Button */}
                             <button
-                              onClick={() => {
-                                setSelectedCompany(tenant);
-                                setActionType('suspend');
-                                setIsActionModalOpen(true);
-                              }}
-                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
+                              type="button"
+                              onClick={() => handleOpenSuspendModal(tenant)}
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition border cursor-pointer ${
                                 tenant.status === 'Suspended'
                                   ? 'bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 border-emerald-700/50'
                                   : 'bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border-amber-700/40'
@@ -685,16 +701,13 @@ export const SuperAdminDashboard: React.FC = () => {
 
                             {/* Delete Button */}
                             <button
-                              onClick={() => {
-                                setSelectedCompany(tenant);
-                                setActionType('delete');
-                                setIsActionModalOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-700/40 transition hover:border-rose-500"
+                              type="button"
+                              onClick={() => handleOpenDeleteModal(tenant)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-700/40 transition hover:border-rose-500 cursor-pointer"
                               title="Delete workspace"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                              <span className="sr-only sm:not-sr-only">Delete</span>
+                              <span>Delete</span>
                             </button>
                           </div>
                         </td>
@@ -1011,11 +1024,11 @@ export const SuperAdminDashboard: React.FC = () => {
       {/* 3. CONFIRMATION MODAL (SUSPEND / DELETE)                 */}
       {/* ======================================================== */}
       {isActionModalOpen && selectedCompany && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
           {/* Modal Backdrop click to close */}
           <div
             className="fixed inset-0"
-            onClick={handleCloseActionModal}
+            onClick={!isSubmittingAction ? handleCloseActionModal : undefined}
           />
 
           {/* Modal Container */}
@@ -1026,18 +1039,26 @@ export const SuperAdminDashboard: React.FC = () => {
                 className={`p-3 rounded-2xl flex-shrink-0 ${
                   actionType === 'delete'
                     ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                    : selectedCompany.status === 'Suspended'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                     : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                 }`}
               >
                 {actionType === 'delete' ? (
                   <Trash2 className="w-6 h-6" />
+                ) : selectedCompany.status === 'Suspended' ? (
+                  <PlayCircle className="w-6 h-6" />
                 ) : (
-                  <AlertTriangle className="w-6 h-6" />
+                  <PauseCircle className="w-6 h-6" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg font-bold text-white tracking-tight">
-                  Confirm {actionType === 'delete' ? 'Deletion' : 'Suspension'}
+                  {actionType === 'delete'
+                    ? 'Delete Company Workspace'
+                    : selectedCompany.status === 'Suspended'
+                    ? 'Re-activate Workspace'
+                    : 'Suspend Workspace'}
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Tenant ID: <span className="font-mono text-slate-300">{selectedCompany.tenantId}</span>
@@ -1047,7 +1068,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 type="button"
                 onClick={handleCloseActionModal}
                 disabled={isSubmittingAction}
-                className="text-slate-400 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                className="text-slate-400 hover:text-slate-200 transition p-1 rounded-lg hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1055,11 +1076,31 @@ export const SuperAdminDashboard: React.FC = () => {
 
             {/* Body Text */}
             <div className="bg-slate-950/60 rounded-xl p-4 border border-slate-800/80 text-sm text-slate-300 leading-relaxed">
-              Are you sure you want to {actionType} the workspace for &quot;
-              <span className="font-semibold text-white">
-                {selectedCompany?.name || selectedCompany?.companyName}
-              </span>
-              &quot;? This action is irreversible.
+              {actionType === 'delete' ? (
+                <>
+                  Are you sure you want to permanently delete the workspace for &quot;
+                  <span className="font-semibold text-white">
+                    {selectedCompany?.name || selectedCompany?.companyName}
+                  </span>
+                  &quot;? All associated users, seats, and workspace data will be removed. This action is irreversible.
+                </>
+              ) : selectedCompany.status === 'Suspended' ? (
+                <>
+                  Are you sure you want to re-activate the workspace for &quot;
+                  <span className="font-semibold text-white">
+                    {selectedCompany?.name || selectedCompany?.companyName}
+                  </span>
+                  &quot;? Organization members will regain full platform access.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to suspend the workspace for &quot;
+                  <span className="font-semibold text-white">
+                    {selectedCompany?.name || selectedCompany?.companyName}
+                  </span>
+                  &quot;? Organization members will be prevented from accessing the CRM until re-activated.
+                </>
+              )}
             </div>
 
             {/* Modal Actions */}
@@ -1068,7 +1109,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 type="button"
                 onClick={handleCloseActionModal}
                 disabled={isSubmittingAction}
-                className="px-4 py-2.5 text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-50"
+                className="px-4 py-2.5 text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
@@ -1076,14 +1117,30 @@ export const SuperAdminDashboard: React.FC = () => {
                 type="button"
                 onClick={handleConfirmAction}
                 disabled={isSubmittingAction}
-                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition shadow-lg disabled:opacity-50 ${
+                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition shadow-lg disabled:opacity-50 cursor-pointer ${
                   actionType === 'delete'
                     ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30'
+                    : selectedCompany.status === 'Suspended'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
                     : 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30'
                 }`}
               >
-                {isSubmittingAction && <Loader2 className="w-4 h-4 animate-spin" />}
-                Confirm Action
+                {isSubmittingAction ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : actionType === 'delete' ? (
+                  <Trash2 className="w-4 h-4" />
+                ) : selectedCompany.status === 'Suspended' ? (
+                  <PlayCircle className="w-4 h-4" />
+                ) : (
+                  <PauseCircle className="w-4 h-4" />
+                )}
+                <span>
+                  {actionType === 'delete'
+                    ? 'Delete Workspace'
+                    : selectedCompany.status === 'Suspended'
+                    ? 'Activate Workspace'
+                    : 'Suspend Workspace'}
+                </span>
               </button>
             </div>
           </div>

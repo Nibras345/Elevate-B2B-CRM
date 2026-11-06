@@ -4,6 +4,9 @@ import { Tenant } from '../models/Tenant';
 import { User } from '../models/User';
 import { Lead } from '../models/Lead';
 import { Invoice } from '../models/Invoice';
+import { Client } from '../models/Client';
+import { SeatRequest } from '../models/SeatRequest';
+import { Notification } from '../models/Notification';
 import { AuthRequest } from '../types';
 
 /**
@@ -67,16 +70,8 @@ export const getSuperAdminDashboardStats = async (
       },
     ]);
 
-    let totalRegisteredCompanies = companyAgg[0]?.totalRegistered ?? 0;
-    let totalActiveCompanies = companyAgg[0]?.totalActive ?? 0;
-
-    // Check distinct tenantId in User to ensure any newly provisioned workspace code is counted
-    const distinctUserTenants = (await User.distinct('tenantId')).filter(Boolean).length;
-    if (distinctUserTenants > totalRegisteredCompanies) {
-      const difference = distinctUserTenants - totalRegisteredCompanies;
-      totalRegisteredCompanies = distinctUserTenants;
-      totalActiveCompanies += difference;
-    }
+    const totalRegisteredCompanies = companyAgg[0]?.totalRegistered ?? 0;
+    const totalActiveCompanies = companyAgg[0]?.totalActive ?? 0;
 
     // 2. Global Platform Revenue:
     // Run MongoDB Aggregations to sum estimatedValue for all Leads where stage === 'Won / Closed' (and settled Paid Invoices)
@@ -164,27 +159,8 @@ export const getSuperAdminTenants = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // 1. Fetch all tenant documents
+    // 1. Fetch all registered tenant documents
     const tenants = await Tenant.find().sort({ createdAt: -1 }).lean();
-
-    // Synchronize any distinct tenantId from User not yet registered in Tenant collection
-    const existingTenantCodes = new Set(tenants.map((t) => t.tenantId));
-    const distinctUserTenantIds = await User.distinct('tenantId');
-
-    for (const tId of distinctUserTenantIds) {
-      if (tId && !existingTenantCodes.has(tId)) {
-        const sampleUser = await User.findOne({ tenantId: tId });
-        const autoTenant = await Tenant.create({
-          name: (sampleUser as any)?.companyName || (sampleUser?.name ? `${sampleUser.name}'s Org` : `Workspace ${tId}`),
-          tenantId: tId,
-          currency: 'USD ($)',
-          maxSeats: 5,
-          status: 'Active',
-        });
-        tenants.push(autoTenant.toObject() as any);
-        existingTenantCodes.add(tId);
-      }
-    }
 
     // 2. Pre-aggregate dynamic revenue across all tenants in real-time (Lead Won + Invoice Paid)
     const [leadsByTenant, invoicesByTenant] = await Promise.all([
@@ -323,14 +299,15 @@ export const updateTenantStatus = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { status } = req.body;
 
-    let targetTenant;
-    if (mongoose.isValidObjectId(id)) {
+    // 1. Identifier Resolution: Try finding by custom string tenantId first
+    let targetTenant = await Tenant.findOne({ tenantId: id });
+
+    // Fallback: If not found, attempt finding by MongoDB ObjectId if valid
+    if (!targetTenant && typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) {
       targetTenant = await Tenant.findById(id);
-    } else {
-      targetTenant = await Tenant.findOne({ tenantId: id });
     }
 
     if (!targetTenant) {
@@ -357,7 +334,7 @@ export const updateTenantStatus = async (
 
 /**
  * @route   DELETE /api/super-admin/tenants/:id
- * @desc    Delete tenant and optionally cleanup resources
+ * @desc    Delete tenant and cascadingly cleanup all associated resources with strict schema typing
  * @access  Private (Super Admin strictly)
  */
 export const deleteTenant = async (
@@ -366,16 +343,18 @@ export const deleteTenant = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
-    let targetTenant;
-    if (mongoose.isValidObjectId(id)) {
-      targetTenant = await Tenant.findById(id);
-    } else {
-      targetTenant = await Tenant.findOne({ tenantId: id });
+    // 1. Identifier Resolution: Try finding by custom string tenantId first
+    let tenant = await Tenant.findOne({ tenantId: id });
+
+    // Fallback: If not found, attempt finding by MongoDB ObjectId if valid
+    if (!tenant && typeof id === 'string' && mongoose.Types.ObjectId.isValid(id)) {
+      tenant = await Tenant.findById(id);
     }
 
-    if (!targetTenant) {
+    // If still not found, return 404
+    if (!tenant) {
       res.status(404).json({
         success: false,
         message: 'Tenant / Company not found',
@@ -383,11 +362,49 @@ export const deleteTenant = async (
       return;
     }
 
-    await Tenant.findByIdAndDelete(targetTenant._id);
+    const tenantObjectId = tenant._id;
+    const tenantCode = tenant.tenantId;
+
+    // 2. Cascading Deletions: Match exact schema types to prevent Mongoose CastErrors
+    // - SeatRequest references tenantId as Schema.Types.ObjectId
+    await SeatRequest.deleteMany({ tenantId: tenantObjectId });
+
+    // - Lead references tenantId as Schema.Types.ObjectId
+    await Lead.deleteMany({
+      $or: [{ tenantId: tenantObjectId }, { tenantCode }],
+    });
+
+    // - Client references tenantId as Mixed / ObjectId
+    await Client.deleteMany({
+      $or: [{ tenantId: tenantObjectId }, { tenantCode }, { tenantId: tenantCode as any }],
+    });
+
+    // - Invoice references tenantId as Schema.Types.ObjectId
+    await Invoice.deleteMany({ tenantId: tenantObjectId });
+
+    // - Notification references tenantId as Schema.Types.ObjectId
+    await Notification.deleteMany({
+      $or: [{ tenantId: tenantObjectId }, { tenantCode }],
+    });
+
+    // - User references tenantId as String and tenant as Schema.Types.ObjectId
+    await User.deleteMany({
+      $or: [
+        { tenantId: tenantCode },
+        { tenant: tenantObjectId },
+        { tenantIds: tenantCode },
+        { tenants: tenantObjectId },
+        { 'workspaces.tenantId': tenantCode },
+        { 'workspaces.tenant': tenantObjectId },
+      ],
+    });
+
+    // 3. Finally, delete the tenant document itself
+    await Tenant.findByIdAndDelete(tenantObjectId);
 
     res.status(200).json({
       success: true,
-      message: `Company ${targetTenant.name} (${targetTenant.tenantId}) has been successfully deleted`,
+      message: `Company ${tenant.name} (${tenantCode}) has been successfully deleted`,
     });
   } catch (error: any) {
     next(error);
