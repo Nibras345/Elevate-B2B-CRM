@@ -422,7 +422,7 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 ### 💳 Seat Billing & Manual Payments (`/api/billing`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/billing/request-seats` | Admin (`Company Admin`) | Submit payment screenshot (JazzCash/Easypaisa to 03224232219) and request seats |
+| `POST` | `/api/billing/request-seats` | Admin (`Company Admin`) | Submit payment screenshot (JazzCash/Easypaisa) and request seats |
 | `GET` | `/api/billing/my-requests` | Admin (`Company Admin`) | Retrieve workspace seat purchase requests and status history |
 
 ### 🧭 App & Navigation Stats (`/api/app`)
