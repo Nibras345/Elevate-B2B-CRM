@@ -3,6 +3,8 @@ import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 import { connectDB } from './config/db';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
@@ -45,8 +47,27 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static uploaded files (e.g., billing payment screenshots)
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static uploaded files (e.g., billing payment screenshots) BEFORE API routes
+const uploadsDir = fs.existsSync(path.resolve(__dirname, '../uploads'))
+  ? path.resolve(__dirname, '../uploads')
+  : fs.existsSync(path.resolve(__dirname, 'uploads'))
+  ? path.resolve(__dirname, 'uploads')
+  : path.resolve(process.cwd(), 'uploads');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+app.use('/uploads', express.static(uploadsDir));
+
+// Also serve cwd/uploads if distinct and exists
+const cwdUploads = path.resolve(process.cwd(), 'uploads');
+if (cwdUploads !== uploadsDir && fs.existsSync(cwdUploads)) {
+  app.use('/uploads', express.static(cwdUploads));
+}
 
 // Health Check Endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

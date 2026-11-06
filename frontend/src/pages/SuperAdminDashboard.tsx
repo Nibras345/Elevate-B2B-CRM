@@ -73,6 +73,21 @@ export const SuperAdminDashboard: React.FC = () => {
     }).format(val || 0);
   };
 
+  // Safely format backend static file URL without double slashes
+  const getImageUrl = (url?: string | null): string => {
+    if (!url) return '';
+    if (/^(https?:|\/\/|data:)/i.test(url)) {
+      return url;
+    }
+    const apiBase =
+      (import.meta as any).env?.VITE_API_URL ||
+      ((globalThis as any).process?.env?.REACT_APP_API_URL) ||
+      'http://localhost:5000';
+    const cleanBase = String(apiBase).replace(/\/+$/, '');
+    const cleanPath = String(url).replace(/^\/+/, '');
+    return `${cleanBase}/${cleanPath}`;
+  };
+
   // Fetch Super Admin Aggregated Metrics & Tenants
   const fetchSuperAdminData = useCallback(async (isRefresh = false) => {
     try {
@@ -885,9 +900,13 @@ export const SuperAdminDashboard: React.FC = () => {
                                 title="Click to view full payment verification receipt"
                               >
                                 <img
-                                  src={req.screenshotUrl}
+                                  src={getImageUrl(req.screenshotUrl)}
                                   alt="Payment receipt proof"
-                                  className="w-10 h-10 object-cover rounded-lg border border-slate-700 group-hover/thumb:opacity-90 transition"
+                                  className="w-10 h-10 object-cover rounded-lg border border-slate-700 group-hover/thumb:opacity-90 transition bg-slate-900"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).src =
+                                      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="%23818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+                                  }}
                                 />
                                 <div className="text-left pr-2">
                                   <span className="text-xs font-semibold text-slate-200 group-hover/thumb:text-violet-300 flex items-center gap-1">
@@ -1097,20 +1116,24 @@ export const SuperAdminDashboard: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="bg-slate-950 rounded-xl p-3 flex items-center justify-center border border-slate-800/80">
+            <div className="bg-slate-950 rounded-xl p-3 flex items-center justify-center border border-slate-800/80 min-h-[220px]">
               <img
-                src={screenshotModalUrl}
+                src={getImageUrl(screenshotModalUrl)}
                 alt="Payment Receipt Verification"
                 className="max-h-[70vh] object-contain rounded-lg shadow-lg"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src =
+                    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="%23818cf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+                }}
               />
             </div>
             <div className="flex items-center justify-between pt-1 text-xs text-slate-400">
               <span>Target Transfer Account: <strong className="text-amber-400 font-mono">03224232219</strong></span>
               <a
-                href={screenshotModalUrl}
+                href={getImageUrl(screenshotModalUrl)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-violet-400 hover:underline flex items-center gap-1"
+                className="text-violet-400 hover:underline flex items-center gap-1 font-medium"
               >
                 <span>Open in new tab</span>
                 <ExternalLink className="w-3.5 h-3.5" />

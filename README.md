@@ -58,7 +58,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - **Default Plan**: 5 Workspace Seats (Forever Free) — Active by default for all workspaces.
   - **Per Seat Plan**: $15 / seat for custom granular scaling.
   - **Bundle Plan**: $55 / 5 seats ($11/seat effective rate, 27% savings).
-- **Multipart Payment Proof Upload**: Multer disk-storage upload middleware (`/uploads/billing/`) with 10MB file limit, image mime validation, and static asset serving via Express (`app.use('/uploads', express.static(...))`).
+- **Multipart Payment Proof Upload**: Multer disk-storage upload middleware (`/uploads/billing/`) with 10MB file limit, image mime validation, static asset serving via Express (`app.use('/uploads', express.static(...))`), and Vite dev-server `/uploads` reverse proxy with URL sanitization (preventing double slashes and resolving port 5000 static routes).
 - **Company Admin Billing Hub (`/billing`)**: Dedicated billing interface for Company Admins displaying current seat utilization, plan cards, interactive calculation modal, JazzCash/Easypaisa payment details, screenshot uploader, and request status history.
 - **Super Admin Seat Assignment Console**: Dedicated `Seat Assignments` tab on `/super-admin` with pending request counters, clickable full-size screenshot verification modals, and 1-click `Approve` (dynamically increments `tenant.maxSeats`) and `Reject` actions.
 - **Dynamic Capacity Unlock**: Approving a request immediately increments `tenant.maxSeats` and notifies the tenant via `Notification`, allowing the Company Admin to invite new teammates up to their expanded capacity limit without breaking strict seat boundaries.

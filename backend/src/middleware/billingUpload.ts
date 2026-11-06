@@ -1,10 +1,18 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { Request } from 'express';
 
-// Ensure uploads/billing directory exists
-const uploadDir = path.join(process.cwd(), 'uploads', 'billing');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure uploads/billing directory exists consistently in backend/uploads/billing
+const baseUploads = fs.existsSync(path.resolve(__dirname, '../../uploads'))
+  ? path.resolve(__dirname, '../../uploads')
+  : path.resolve(process.cwd(), 'uploads');
+
+const uploadDir = path.join(baseUploads, 'billing');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

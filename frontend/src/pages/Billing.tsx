@@ -57,6 +57,21 @@ export const Billing: React.FC = () => {
   // Preview Modal for Screenshots
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  // Safely format backend static file URL without double slashes
+  const getImageUrl = (url?: string | null): string => {
+    if (!url) return '';
+    if (/^(https?:|\/\/|data:)/i.test(url)) {
+      return url;
+    }
+    const apiBase =
+      (import.meta as any).env?.VITE_API_URL ||
+      ((globalThis as any).process?.env?.REACT_APP_API_URL) ||
+      'http://localhost:5000';
+    const cleanBase = String(apiBase).replace(/\/+$/, '');
+    const cleanPath = String(url).replace(/^\/+/, '');
+    return `${cleanBase}/${cleanPath}`;
+  };
+
   // Fetch current seat statistics
   const fetchSeatStats = useCallback(async () => {
     try {
@@ -785,7 +800,7 @@ export const Billing: React.FC = () => {
                       {req.screenshotUrl ? (
                         <button
                           type="button"
-                          onClick={() => setPreviewImage(req.screenshotUrl)}
+                          onClick={() => setPreviewImage(getImageUrl(req.screenshotUrl))}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950 transition cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -848,11 +863,15 @@ export const Billing: React.FC = () => {
                 ✕
               </button>
             </div>
-            <div className="flex items-center justify-center bg-slate-950/40 rounded-xl p-2">
+            <div className="flex items-center justify-center bg-slate-950/40 rounded-xl p-2 min-h-[200px]">
               <img
-                src={previewImage}
+                src={getImageUrl(previewImage)}
                 alt="Payment Proof Full"
                 className="max-h-[70vh] object-contain rounded-lg shadow-md"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src =
+                    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="%23818cf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+                }}
               />
             </div>
           </div>
