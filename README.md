@@ -53,7 +53,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Instant Client-Side Sync**: Employs global browser event dispatching (`crm_seat_stats_updated`) to update the Sidebar subscription card and Team settings in real-time.
 
 ### 💳 3. Manual Billing & Seat Management System (JazzCash / Easypaisa)
-- **Local Mobile Payment Verification**: Manual seat purchases via Pakistani mobile financial services (**JazzCash** and **Easypaisa**) targeting the verified merchant account: **`03224232219`**.
+- **Local Mobile Payment Verification**: Manual seat purchases via Pakistani mobile financial services (**JazzCash** and **Easypaisa**) targeting the verified merchant account.
 - **3 Transparent Pricing Tiers**:
   - **Default Plan**: 5 Workspace Seats (Forever Free) — Active by default for all workspaces.
   - **Per Seat Plan**: $15 / seat for custom granular scaling.
