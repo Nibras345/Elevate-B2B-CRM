@@ -1,5 +1,40 @@
 export type Role = 'Company Admin' | 'Employee' | 'Sales Agent' | 'Support' | 'Super Admin';
 
+export type SeatRequestStatus = 'Pending' | 'Approved' | 'Rejected';
+
+export interface SeatRequestItem {
+  _id: string;
+  id?: string;
+  tenantId: {
+    _id: string;
+    name: string;
+    tenantId: string;
+    maxSeats?: number;
+    status?: string;
+    currency?: string;
+  } | string;
+  planName: string;
+  requestedSeats: number;
+  totalAmount: number;
+  screenshotUrl: string;
+  status: SeatRequestStatus;
+  requestedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+    role?: string;
+  };
+  reviewedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  reviewedAt?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface DashboardStatsResponse {
   success?: boolean;
   totalRegisteredCompanies: number;

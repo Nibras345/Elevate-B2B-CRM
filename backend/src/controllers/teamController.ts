@@ -73,8 +73,9 @@ export const inviteTeamMember = async (
       // If user exists but is NOT in this workspace, proceed with invitation (multi-tenant support)
     }
 
-    // 2. Enforce Strict 5-Seat Limit per Workspace
+    // 2. Enforce Workspace Seat Limit (Default: 5, or tenant.maxSeats if upgraded)
     const tenantDoc = await Tenant.findOne({ tenantId: currentTenantId });
+    const maxAllowedSeats = tenantDoc?.maxSeats || 5;
     const currentSeatCount = await User.countDocuments({
       $or: [
         { tenantId: currentTenantId },
@@ -89,10 +90,10 @@ export const inviteTeamMember = async (
       email: { $ne: normalizedEmail },
     });
 
-    if (currentSeatCount >= 5 || (currentSeatCount + pendingInvitesCount) >= 5) {
+    if (currentSeatCount >= maxAllowedSeats || (currentSeatCount + pendingInvitesCount) >= maxAllowedSeats) {
       res.status(403).json({
         success: false,
-        message: 'Seat limit reached. You cannot add more than 5 members.',
+        message: `Seat limit reached. You cannot add more than ${maxAllowedSeats} members.`,
       });
       return;
     }
@@ -546,7 +547,8 @@ export const acceptInvite = async (
       }
     }
 
-    // 3b. Verify Workspace Seat Limit has not been exceeded (strict 5-seat limit)
+    // 3b. Verify Workspace Seat Limit has not been exceeded
+    const maxAllowedSeats = tenantDoc?.maxSeats || 5;
     const currentSeatCount = await User.countDocuments({
       $or: [
         { tenantId: invitation.tenantId },
@@ -556,10 +558,10 @@ export const acceptInvite = async (
       isActive: { $ne: false },
     });
 
-    if (currentSeatCount >= 5) {
+    if (currentSeatCount >= maxAllowedSeats) {
       res.status(403).json({
         success: false,
-        message: 'Seat limit reached. You cannot add more than 5 members.',
+        message: `Seat limit reached. You cannot add more than ${maxAllowedSeats} members.`,
       });
       return;
     }

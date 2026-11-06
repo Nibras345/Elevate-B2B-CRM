@@ -25,14 +25,22 @@ import {
   ArrowLeft,
   X,
   Loader2,
+  CreditCard,
+  Clock,
+  Eye,
+  Check,
+  XCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { DashboardStatsResponse, SuperAdminTenant } from '../types';
+import { DashboardStatsResponse, SuperAdminTenant, SeatRequestItem } from '../types';
 
 export const SuperAdminDashboard: React.FC = () => {
   const { user } = useAuth();
   const { notify } = useNotification();
+
+  // Navigation tab state
+  const [activeTab, setActiveTab] = useState<'companies' | 'seat-assignments'>('companies');
 
   const [stats, setStats] = useState<DashboardStatsResponse | null>(null);
   const [tenants, setTenants] = useState<SuperAdminTenant[]>([]);
@@ -40,6 +48,15 @@ export const SuperAdminDashboard: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Active' | 'Suspended'>('ALL');
+
+  // Seat Assignments State
+  const [seatRequests, setSeatRequests] = useState<SeatRequestItem[]>([]);
+  const [isSeatRequestsLoading, setIsSeatRequestsLoading] = useState<boolean>(false);
+  const [requestFilter, setRequestFilter] = useState<'Pending' | 'Approved' | 'Rejected' | 'ALL'>('Pending');
+  const [requestSearchQuery, setRequestSearchQuery] = useState<string>('');
+  const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
+  const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null);
+  const [screenshotModalUrl, setScreenshotModalUrl] = useState<string | null>(null);
 
   // Confirmation Modal State
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
@@ -69,9 +86,10 @@ export const SuperAdminDashboard: React.FC = () => {
         },
       };
 
-      const [statsRes, tenantsRes] = await Promise.all([
+      const [statsRes, tenantsRes, seatRequestsRes] = await Promise.all([
         axios.get<DashboardStatsResponse>('/api/super-admin/dashboard-stats', authHeader),
         axios.get('/api/super-admin/tenants', authHeader),
+        axios.get('/api/super-admin/seat-requests', authHeader),
       ]);
 
       if (statsRes.data?.success || statsRes.data?.totalRegisteredCompanies !== undefined) {
@@ -86,6 +104,10 @@ export const SuperAdminDashboard: React.FC = () => {
       if (tenantsRes.data?.success) {
         const tenantList = tenantsRes.data.tenants || tenantsRes.data.data || [];
         setTenants(tenantList);
+      }
+
+      if (seatRequestsRes.data?.success && Array.isArray(seatRequestsRes.data.seatRequests)) {
+        setSeatRequests(seatRequestsRes.data.seatRequests);
       }
     } catch (error: any) {
       console.error('Failed to load Super Admin data:', error);
@@ -172,6 +194,52 @@ export const SuperAdminDashboard: React.FC = () => {
     }
   };
 
+  // Handle seat request approval
+  const handleApproveSeatRequest = async (requestId: string) => {
+    try {
+      setApprovingRequestId(requestId);
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const res = await axios.put(
+        `/api/super-admin/assign-seats/${requestId}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.success) {
+        notify(res.data.message || 'Seats successfully assigned to company!', 'success');
+        fetchSuperAdminData(true);
+      } else {
+        notify(res.data.message || 'Failed to approve seat request', 'error');
+      }
+    } catch (err: any) {
+      console.error('Approve seat request error:', err);
+      const msg = err.response?.data?.message || 'Error approving seat request';
+      notify(msg, 'error');
+    } finally {
+      setApprovingRequestId(null);
+    }
+  };
+
+  // Handle seat request rejection
+  const handleRejectSeatRequest = async (requestId: string) => {
+    try {
+      setRejectingRequestId(requestId);
+      const token = localStorage.getItem('nexcrm_jwt_token');
+      const res = await axios.put(
+        `/api/super-admin/reject-seats/${requestId}`,
+        { reason: 'Payment could not be verified' },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.success) {
+        notify('Seat request marked as Rejected', 'info');
+        fetchSuperAdminData(true);
+      }
+    } catch (err: any) {
+      notify(err.response?.data?.message || 'Error rejecting request', 'error');
+    } finally {
+      setRejectingRequestId(null);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     notify(`Copied ${text} to clipboard!`, 'info', 2000);
@@ -191,6 +259,29 @@ export const SuperAdminDashboard: React.FC = () => {
 
     return matchesSearch && matchesStatus;
   });
+
+  // Filtered Seat Requests List
+  const filteredSeatRequests = seatRequests.filter((req) => {
+    const tenantObj = typeof req.tenantId === 'object' && req.tenantId !== null ? req.tenantId : null;
+    const companyName = tenantObj?.name?.toLowerCase() || '';
+    const tenantCode = tenantObj?.tenantId?.toLowerCase() || '';
+    const requester = req.requestedBy?.email?.toLowerCase() || '';
+    const query = requestSearchQuery.toLowerCase().trim();
+
+    const matchesQuery =
+      !query ||
+      companyName.includes(query) ||
+      tenantCode.includes(query) ||
+      requester.includes(query) ||
+      req.planName?.toLowerCase().includes(query);
+
+    const matchesStatus =
+      requestFilter === 'ALL' || req.status === requestFilter;
+
+    return matchesQuery && matchesStatus;
+  });
+
+  const pendingRequestsCount = seatRequests.filter((r) => r.status === 'Pending').length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -333,8 +424,52 @@ export const SuperAdminDashboard: React.FC = () => {
         </section>
 
         {/* ======================================================== */}
+        {/* NAVIGATION TABS: COMPANIES VS SEAT ASSIGNMENTS          */}
+        {/* ======================================================== */}
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('companies')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+              activeTab === 'companies'
+                ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent'
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            <span>Registered Companies</span>
+            <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-slate-950/70 text-slate-300 font-mono">
+              {tenants.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('seat-assignments')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer relative ${
+              activeTab === 'seat-assignments'
+                ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Seat Assignments</span>
+            {pendingRequestsCount > 0 ? (
+              <span className="ml-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-400 text-slate-950 animate-pulse shadow-sm">
+                {pendingRequestsCount} Pending
+              </span>
+            ) : (
+              <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-slate-950/70 text-slate-300 font-mono">
+                {seatRequests.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* ======================================================== */}
         {/* 2. REGISTERED COMPANIES DATA TABLE                       */}
         {/* ======================================================== */}
+        {activeTab === 'companies' && (
         <section className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
           {/* Table Header Controls */}
           <div className="p-5 sm:p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -566,6 +701,291 @@ export const SuperAdminDashboard: React.FC = () => {
             </span>
           </div>
         </section>
+        )}
+
+        {/* ======================================================== */}
+        {/* SEAT ASSIGNMENTS DATA TABLE                              */}
+        {/* ======================================================== */}
+        {activeTab === 'seat-assignments' && (
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+            {/* Table Header Controls */}
+            <div className="p-5 sm:p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-violet-400" />
+                  Seat Requests & Payment Verification
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Verify manual JazzCash &amp; Easypaisa payment screenshots to approve and dynamically assign workspace seats.
+                </p>
+              </div>
+
+              {/* Filter & Search Bar */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Search Box */}
+                <div className="relative min-w-[240px]">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search company, ID, or email..."
+                    value={requestSearchQuery}
+                    onChange={(e) => setRequestSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5 text-xs">
+                  {(['Pending', 'Approved', 'Rejected', 'ALL'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setRequestFilter(filter)}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                        requestFilter === filter
+                          ? 'bg-violet-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {filter === 'ALL' ? 'All' : filter}
+                      {filter === 'Pending' && pendingRequestsCount > 0 && (
+                        <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400 text-slate-950 font-bold">
+                          {pendingRequestsCount}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Table Element */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-slate-950/70 text-xs font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th scope="col" className="py-3.5 px-6">Company Name</th>
+                    <th scope="col" className="py-3.5 px-6">Plan Requested</th>
+                    <th scope="col" className="py-3.5 px-6">Seats Requested</th>
+                    <th scope="col" className="py-3.5 px-6">Amount Paid</th>
+                    <th scope="col" className="py-3.5 px-6">Screenshot</th>
+                    <th scope="col" className="py-3.5 px-6 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {isSeatRequestsLoading ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center gap-3">
+                          <RefreshCw className="w-6 h-6 animate-spin text-violet-500" />
+                          <span className="text-sm">Fetching seat upgrade requests...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredSeatRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <CreditCard className="w-10 h-10 text-slate-600 stroke-[1.5]" />
+                          <p className="text-base font-semibold text-slate-300">
+                            {requestFilter === 'Pending'
+                              ? 'No pending seat requests'
+                              : 'No requests matched your filter'}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {requestFilter === 'Pending'
+                              ? 'All incoming customer seat requests have been processed.'
+                              : 'Try changing your keyword search or filter tabs.'}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSeatRequests.map((req) => {
+                      const tenantObj =
+                        typeof req.tenantId === 'object' && req.tenantId !== null
+                          ? req.tenantId
+                          : null;
+                      const companyName = tenantObj?.name || 'Enterprise Workspace';
+                      const tenantCode = tenantObj?.tenantId || '';
+                      const currentCapacity = tenantObj?.maxSeats || 5;
+                      const requestId = req._id || req.id!;
+
+                      return (
+                        <tr
+                          key={requestId}
+                          className="hover:bg-slate-800/40 transition group"
+                        >
+                          {/* 1. Company Name & Identifier */}
+                          <td className="py-4 px-6">
+                            <div className="flex items-start gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-300 font-bold shrink-0 mt-0.5">
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-white block text-sm group-hover:text-violet-300 transition truncate">
+                                  {companyName}
+                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="font-mono text-xs text-slate-400">
+                                    {tenantCode}
+                                  </span>
+                                  {req.requestedBy?.email && (
+                                    <span className="text-xs text-slate-500 truncate max-w-[180px]">
+                                      • {req.requestedBy.email}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[11px] text-slate-500 block mt-0.5">
+                                  Current Limit: <strong>{currentCapacity} Seats</strong>
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 2. Plan Requested */}
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-950 border border-slate-800 text-slate-200">
+                              <CreditCard className="w-3.5 h-3.5 text-violet-400" />
+                              <span>{req.planName}</span>
+                            </span>
+                          </td>
+
+                          {/* 3. Seats Requested */}
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-sm text-violet-400">
+                                +{req.requestedSeats} Seats
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                New Limit: <strong>{currentCapacity + req.requestedSeats}</strong>
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* 4. Amount Paid */}
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="font-bold text-sm text-emerald-400">
+                                {formatUSD(req.totalAmount)}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                JazzCash / Easypaisa
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* 5. Screenshot Thumbnail (Clickable) */}
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            {req.screenshotUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setScreenshotModalUrl(req.screenshotUrl)}
+                                className="group/thumb flex items-center gap-2 p-1.5 bg-slate-950 hover:bg-slate-800 rounded-xl border border-slate-800 hover:border-violet-500/50 transition cursor-pointer"
+                                title="Click to view full payment verification receipt"
+                              >
+                                <img
+                                  src={req.screenshotUrl}
+                                  alt="Payment receipt proof"
+                                  className="w-10 h-10 object-cover rounded-lg border border-slate-700 group-hover/thumb:opacity-90 transition"
+                                />
+                                <div className="text-left pr-2">
+                                  <span className="text-xs font-semibold text-slate-200 group-hover/thumb:text-violet-300 flex items-center gap-1">
+                                    <Eye className="w-3.5 h-3.5 text-violet-400" />
+                                    View Proof
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 block">
+                                    Click to zoom
+                                  </span>
+                                </div>
+                              </button>
+                            ) : (
+                              <span className="text-slate-500 text-xs italic">
+                                No receipt
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 6. Actions */}
+                          <td className="py-4 px-6 text-right whitespace-nowrap">
+                            {req.status === 'Pending' ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  disabled={
+                                    approvingRequestId === requestId ||
+                                    rejectingRequestId === requestId
+                                  }
+                                  onClick={() => handleApproveSeatRequest(requestId)}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/25 transition disabled:opacity-50 cursor-pointer"
+                                  title="Approve payment and dynamically increase workspace capacity"
+                                >
+                                  {approvingRequestId === requestId ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Approve</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={
+                                    approvingRequestId === requestId ||
+                                    rejectingRequestId === requestId
+                                  }
+                                  onClick={() => handleRejectSeatRequest(requestId)}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-800 transition disabled:opacity-50 cursor-pointer"
+                                  title="Reject invalid payment proof"
+                                >
+                                  {rejectingRequestId === requestId ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  )}
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            ) : req.status === 'Approved' ? (
+                              <div className="text-right">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  Approved
+                                </span>
+                                {req.reviewedAt && (
+                                  <span className="block text-[10px] text-slate-500 mt-0.5">
+                                    {new Date(req.reviewedAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-right">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  Rejected
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Table Footer */}
+            <div className="p-4 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
+              <span>
+                Showing {filteredSeatRequests.length} of {seatRequests.length} seat requests
+              </span>
+              <span className="font-mono text-slate-400">
+                JazzCash / Easypaisa Manual Verification Gateway
+              </span>
+            </div>
+          </section>
+        )}
       </main>
 
       {/* ======================================================== */}
@@ -646,6 +1066,55 @@ export const SuperAdminDashboard: React.FC = () => {
                 {isSubmittingAction && <Loader2 className="w-4 h-4 animate-spin" />}
                 Confirm Action
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ======================================================== */}
+      {/* 4. FULL-SIZE SCREENSHOT PREVIEW MODAL                    */}
+      {/* ======================================================== */}
+      {screenshotModalUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setScreenshotModalUrl(null)}
+        >
+          <div
+            className="relative bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-violet-400" />
+                <h3 className="text-sm font-bold text-white">
+                  Payment Verification Receipt (JazzCash / Easypaisa)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScreenshotModalUrl(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="bg-slate-950 rounded-xl p-3 flex items-center justify-center border border-slate-800/80">
+              <img
+                src={screenshotModalUrl}
+                alt="Payment Receipt Verification"
+                className="max-h-[70vh] object-contain rounded-lg shadow-lg"
+              />
+            </div>
+            <div className="flex items-center justify-between pt-1 text-xs text-slate-400">
+              <span>Target Transfer Account: <strong className="text-amber-400 font-mono">03224232219</strong></span>
+              <a
+                href={screenshotModalUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-violet-400 hover:underline flex items-center gap-1"
+              >
+                <span>Open in new tab</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
             </div>
           </div>
         </div>

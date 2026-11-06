@@ -25,7 +25,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 
 ### 👥 2. Strict 5-Seat Management & Workspace Governance
 - **Strict 5-Seat Capacity**: Every tenant workspace enforces a strict default limit of **5 seats** (1 Admin + 4 Employees).
-- **Backend API Limit Enforcement**: `POST /api/team/invite` and `POST /api/team/accept-invite/:token` query MongoDB in real time to count existing members plus pending invitations:
+- **Backend API Limit Enforcement**: `POST /api/team/invite` and `POST /api/team/accept-invite/:token` query MongoDB in real time to count existing members plus pending invitations, comparing against the organization's dynamic `maxSeats` limit:
   ```typescript
   const currentSeatCount = await User.countDocuments({
     $or: [
@@ -35,22 +35,30 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
     ],
     isActive: { $ne: false },
   });
-  if (currentSeatCount >= 5) {
-    return res.status(403).json({ message: 'Seat limit reached. You cannot add more than 5 members.' });
+  if (currentSeatCount >= maxAllowedSeats) {
+    return res.status(403).json({ message: `Seat limit reached. You cannot add more than ${maxAllowedSeats} members.` });
   }
   ```
-  This eliminates any possibility of bypassing capacity limits via direct API or Postman calls.
-- **Frontend "+ Add Member" Button Guard**: Placed next to the refresh icon in Settings. Conditionally rendered only for admins (`Company Admin` or `Super Admin`), and dynamically disabled when `team.length >= 5`:
+- **Frontend "+ Add Member" Button Guard**: Placed next to the refresh icon in Settings. Conditionally rendered only for admins (`Company Admin` or `Super Admin`), and dynamically disabled when `team.length >= seatStats.maxSeats`:
   ```tsx
-  disabled={team.length >= 5 || isSeatLimitReached}
+  disabled={team.length >= seatStats.maxSeats || isSeatLimitReached}
   className="... disabled:opacity-50 disabled:cursor-not-allowed"
   ```
   Surfaces a real-time hover tooltip: `"Seat limit reached (5 / 5)"`.
 - **Interactive Sidebar Seat Widget**: The "Seats in use" block in the sidebar features interactive hover styles (`cursor-pointer hover:bg-slate-800 rounded-md p-1`) and one-click redirection directly to `/team-members` (which routes to `/settings?tab=team`).
 - **Instant Client-Side Sync**: Employs global browser event dispatching (`crm_seat_stats_updated`) to update the Sidebar subscription card and Team settings in real-time.
-- **Dynamic Closed Revenue Aggregation**: Team members table calculates actual won deal totals per user via a multi-stage MongoDB aggregation pipeline (`$lookup` across tenant leads, `$filter` for `Won / Closed` stage, and `$reduce` summing `estimatedValue`), projecting real-time revenue instead of static $0 placeholders.
 
-### 🛡️ 3. Settings RBAC & Role Separation
+### 💳 3. Manual Billing & Seat Management System (JazzCash / Easypaisa)
+- **Local Mobile Payment Verification**: Manual seat purchases via Pakistani mobile financial services (**JazzCash** and **Easypaisa**) targeting the verified merchant account: **`03224232219`**.
+- **3 Transparent Pricing Tiers**:
+  - **Default Plan**: 5 Workspace Seats (Forever Free) — Active by default for all workspaces.
+  - **Per Seat Plan**: $15 / seat for custom granular scaling.
+  - **Bundle Plan**: $55 / 5 seats ($11/seat effective rate, 27% savings).
+- **Multipart Payment Proof Upload**: Multer disk-storage upload middleware (`/uploads/billing/`) with 10MB file limit, image mime validation, and static asset serving via Express (`app.use('/uploads', express.static(...))`).
+- **Super Admin Seat Assignment Console**: Dedicated `Seat Assignments` tab on `/super-admin` with pending request counters, clickable full-size screenshot verification modals, and 1-click `Approve` (dynamically increments `tenant.maxSeats`) and `Reject` actions.
+- **Dynamic Capacity Unlock**: Approving a request immediately increments `tenant.maxSeats` and notifies the tenant via `Notification`, allowing the Company Admin to invite new teammates up to their expanded capacity limit without breaking strict seat boundaries.
+
+### 🛡️ 4. Settings RBAC & Role Separation
 - **Hidden "Company Settings" Tab**: Regular employees cannot see or access the "Company Settings" tab. The tab navigation conditionally renders it only for `Company Admin` or `Super Admin`:
   ```tsx
   const isAdmin = currentUser?.role === 'Company Admin' || currentUser?.role === 'Super Admin';
@@ -192,17 +200,19 @@ CRM/
 │   │   ├── controllers/
 │   │   │   ├── appController.ts    # Sidebar notification metrics & app badges
 │   │   │   ├── authController.ts   # Sign in, registration, forgot password
+│   │   │   ├── billingController.ts# Seat purchase requests & manual payment verification
 │   │   │   ├── clientController.ts # Enterprise clients & dynamic deal/invoice counts
 │   │   │   ├── dashboardController.ts # Executive analytics, KPIs, pipeline & revenue aggregation
 │   │   │   ├── invoiceController.ts# Invoices CRUD, status updates & population
 │   │   │   ├── leadController.ts   # Leads pipeline & automated Won/Closed conversion workflow
 │   │   │   ├── notificationController.ts # Notification feeds and mark-all-read
 │   │   │   ├── superAdminController.ts # Global multi-tenant telemetry & platform governance
-│   │   │   ├── teamController.ts   # Member invites, strict 5-seat limit, removal, acceptance
+│   │   │   ├── teamController.ts   # Member invites, dynamic seat limit, removal, acceptance
 │   │   │   ├── tenantController.ts # Tenant stats, seat usage, workspace details
 │   │   │   └── userController.ts   # Profile updates, password modification, team members
 │   │   ├── middleware/
 │   │   │   ├── authMiddleware.ts   # JWT verification, tenant isolation guard, requireAdmin, requireSuperAdmin
+│   │   │   ├── billingUpload.ts    # Multer disk-storage for payment verification screenshots
 │   │   │   ├── errorMiddleware.ts  # Centralized error handler
 │   │   │   └── uploadMiddleware.ts # Multer Cloudinary storage for profile pictures
 │   │   ├── models/
@@ -211,17 +221,19 @@ CRM/
 │   │   │   ├── Invoice.ts          # Itemized invoice schema with status, client ref & createdBy
 │   │   │   ├── Lead.ts             # Kanban lead schema with stage progression & createdBy
 │   │   │   ├── Notification.ts     # Multi-tenant activity notification schema
+│   │   │   ├── SeatRequest.ts      # Manual seat purchase request schema with screenshot proof
 │   │   │   ├── Tenant.ts           # Company profile, branding, status, maxSeats schema
 │   │   │   └── User.ts             # User credentials, roles, workspace memberships
 │   │   ├── routes/
 │   │   │   ├── appRoutes.ts        # /api/app endpoints (sidebar badge metrics)
 │   │   │   ├── authRoutes.ts       # /api/auth endpoints
+│   │   │   ├── billingRoutes.ts    # /api/billing endpoints (seat requests & my requests)
 │   │   │   ├── clientRoutes.ts     # /api/clients endpoints
 │   │   │   ├── dashboardRoutes.ts  # /api/dashboard endpoints (stats aggregation)
 │   │   │   ├── invoiceRoutes.ts    # /api/invoices endpoints
 │   │   │   ├── leadRoutes.ts       # /api/leads endpoints
 │   │   │   ├── notificationRoutes.ts # /api/notifications endpoints
-│   │   │   ├── superAdminRoutes.ts # /api/super-admin endpoints (platform stats & companies)
+│   │   │   ├── superAdminRoutes.ts # /api/super-admin endpoints (stats, tenants & seat approvals)
 │   │   │   ├── teamRoutes.ts       # /api/team endpoints
 │   │   │   ├── tenantRoutes.ts     # /api/tenant endpoints
 │   │   │   └── userRoutes.ts       # /api/users endpoints
@@ -258,13 +270,14 @@ CRM/
     │   │   │   ├── ForgotPassword.tsx
     │   │   │   ├── Register.tsx
     │   │   │   └── SignIn.tsx       # Sign in with email pre-fill support from invite acceptance
+    │   │   ├── Billing.tsx         # Manual billing, 3 pricing cards, JazzCash/Easypaisa upload
     │   │   ├── Clients.tsx         # Customer accounts with dynamic metrics & delete confirmation modal
     │   │   ├── Dashboard.tsx       # Executive analytics, KPI metrics, pipeline highlights
     │   │   ├── Invoices.tsx        # Dynamic billing ledger, live KPI widgets, generator & delete modal
     │   │   ├── LeadsPipeline.tsx   # Kanban deals with auto Won/Closed Client conversion & delete modal
     │   │   ├── PendingInviteScreen.tsx # Employee waiting room awaiting workspace invitation
     │   │   ├── Settings.tsx        # Tenant governance, RBAC tab protection, team table & 5-seat management
-    │   │   └── SuperAdminDashboard.tsx # Real-time platform master telemetry & tenant management console
+    │   │   └── SuperAdminDashboard.tsx # Platform master telemetry, tenant directory & seat assignments tab
     │   ├── routes/
     │   │   ├── AppRoutes.tsx       # Application routing tree
     │   │   ├── PrivateRoute.tsx    # Protected route navigation guards
@@ -439,6 +452,12 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | `PUT` | `/api/invoices/:id/status` | Private | Update invoice status (`Paid`, `Pending`, `Overdue`) |
 | `DELETE` | `/api/invoices/:id` | Private | Delete invoice with tenant isolation verification (guarded by `ConfirmDeleteModal`) |
 
+### 💳 Seat Billing & Manual Payments (`/api/billing`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/billing/request-seats` | Admin (`Company Admin`) | Submit payment screenshot (JazzCash/Easypaisa to 03224232219) and request seats |
+| `GET` | `/api/billing/my-requests` | Admin (`Company Admin`) | Retrieve workspace seat purchase requests and status history |
+
 ### 👤 User Profile & Workspace Members (`/api/users`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
@@ -458,6 +477,9 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | `GET` | `/api/super-admin/tenants` | Super Admin (`requireSuperAdmin`) | List all registered companies with admin emails, seat usage (`seatsUsed/maxSeats`), live calculated revenue, and status |
 | `PATCH` | `/api/super-admin/tenants/:id/status` | Super Admin (`requireSuperAdmin`) | Toggle or set company status between `Active` and `Suspended` |
 | `DELETE` | `/api/super-admin/tenants/:id` | Super Admin (`requireSuperAdmin`) | Remove a tenant organization from the platform |
+| `GET` | `/api/super-admin/seat-requests` | Super Admin (`requireSuperAdmin`) | Fetch pending or all customer seat upgrade requests with payment screenshots |
+| `PUT` | `/api/super-admin/assign-seats/:requestId` | Super Admin (`requireSuperAdmin`) | Approve payment proof and dynamically add requested seats to `tenant.maxSeats` |
+| `PUT` | `/api/super-admin/reject-seats/:requestId` | Super Admin (`requireSuperAdmin`) | Reject seat upgrade request with reason |
 
 ---
 

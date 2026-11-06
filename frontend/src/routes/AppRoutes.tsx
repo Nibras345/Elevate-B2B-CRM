@@ -11,6 +11,7 @@ import { LeadsPipeline } from '../pages/LeadsPipeline';
 import { Clients } from '../pages/Clients';
 import { Invoices } from '../pages/Invoices';
 import { Settings } from '../pages/Settings';
+import { Billing } from '../pages/Billing';
 import { SuperAdminDashboard } from '../pages/SuperAdminDashboard';
 import { SuperAdminRoute } from './SuperAdminRoute';
 
@@ -36,6 +37,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/leads" element={<LeadsPipeline />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/invoices" element={<Invoices />} />
+          <Route path="/billing" element={<Billing />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/team-members" element={<Navigate to="/settings?tab=team" replace />} />
         </Route>

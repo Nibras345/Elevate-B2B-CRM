@@ -14,6 +14,7 @@ import {
   Building2,
   Sparkles,
   ArrowUpRight,
+  CreditCard,
   LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -163,6 +164,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null,
       isActiveMatch: (pathname: string, search: string) => pathname === '/settings' && search.includes('tab=team'),
     },
+    ...(user?.role === 'Company Admin' || user?.role === 'Super Admin'
+      ? [
+          {
+            name: 'Billing & Seats',
+            path: '/billing',
+            icon: CreditCard,
+            badge: null,
+          },
+        ]
+      : []),
     {
       name: 'Settings',
       path: '/settings',

@@ -6,6 +6,11 @@ import {
   updateTenantStatus,
   deleteTenant,
 } from '../controllers/superAdminController';
+import {
+  getSuperAdminSeatRequests,
+  assignSeats,
+  rejectSeats,
+} from '../controllers/billingController';
 
 const router = Router();
 
@@ -36,6 +41,24 @@ router.patch('/tenants/:id/status', updateTenantStatus);
  * @desc    Delete a tenant
  */
 router.delete('/tenants/:id', deleteTenant);
+
+/**
+ * @route   GET /api/super-admin/seat-requests
+ * @desc    Fetch pending or all seat upgrade requests
+ */
+router.get('/seat-requests', getSuperAdminSeatRequests);
+
+/**
+ * @route   PUT /api/super-admin/assign-seats/:requestId
+ * @desc    Approve a seat request and increase company maxSeats
+ */
+router.put('/assign-seats/:requestId', assignSeats);
+
+/**
+ * @route   PUT /api/super-admin/reject-seats/:requestId
+ * @desc    Reject a pending seat request
+ */
+router.put('/reject-seats/:requestId', rejectSeats);
 
 export default router;
 

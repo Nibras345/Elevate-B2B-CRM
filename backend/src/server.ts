@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
 import { connectDB } from './config/db';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
@@ -14,6 +15,7 @@ import appRoutes from './routes/appRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import superAdminRoutes from './routes/superAdminRoutes';
+import billingRoutes from './routes/billingRoutes';
 import { errorHandler } from './middleware/errorMiddleware';
 
 // Load environment variables
@@ -43,6 +45,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static uploaded files (e.g., billing payment screenshots)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
 // Health Check Endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({
@@ -65,6 +70,7 @@ app.use('/api/app', appRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/super-admin', superAdminRoutes);
+app.use('/api/billing', billingRoutes);
 
 // Global Error Handler
 app.use(errorHandler);
