@@ -29,6 +29,7 @@ export interface IUser extends Document {
   status: 'Invited' | 'Active';
   resetOtp?: string;
   resetOtpExpiry?: Date;
+  refreshToken?: string | null;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -144,6 +145,10 @@ const UserSchema: Schema<IUser> = new Schema(
     },
     resetOtpExpiry: {
       type: Date,
+      default: null,
+    },
+    refreshToken: {
+      type: String,
       default: null,
     },
   },

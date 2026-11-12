@@ -1,4 +1,4 @@
-import express, { Application, Request, Response } from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -45,6 +45,10 @@ const CLIENT_URL = (process.env.CLIENT_URL || 'https://elevate-b2-b-crm.vercel.a
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
   'https://elevate-b2-b-crm.vercel.app',
 ];
 
@@ -55,16 +59,61 @@ if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) {
 // Connect to MongoDB Database
 await connectDB();
 
-// Request logging middleware
-app.use(morgan('dev'));
+// Real-time API Request & Status Logger in Terminal
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const startTime = Date.now();
+  const { method, originalUrl } = req;
+
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    const statusCode = res.statusCode;
+
+    // Terminal ANSI Colors
+    const reset = '\x1b[0m';
+    const bold = '\x1b[1m';
+    const methodColor = '\x1b[35m'; // Magenta
+
+    let statusColor = '\x1b[32m'; // Green (2xx)
+    let icon = '✅';
+
+    if (statusCode >= 500) {
+      statusColor = '\x1b[31m'; // Red (5xx)
+      icon = '❌';
+    } else if (statusCode >= 400) {
+      statusColor = '\x1b[33m'; // Yellow (4xx)
+      icon = '⚠️';
+    } else if (statusCode >= 300) {
+      statusColor = '\x1b[36m'; // Cyan (3xx)
+      icon = '🔄';
+    }
+
+    console.log(
+      `${icon} ${bold}[API]${reset} ${methodColor}${method}${reset} ${originalUrl} -> ${statusColor}${statusCode}${reset} (${duration}ms)`
+    );
+  });
+
+  next();
+});
 
 // Middleware
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:') ||
+        origin.endsWith('.vercel.app')
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     exposedHeaders: ['Content-Disposition'],
   })
 );

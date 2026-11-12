@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, getMe, logout } from '../controllers/authController';
+import { register, login, getMe, logout, refreshAccessToken } from '../controllers/authController';
 import { protect } from '../middleware/authMiddleware';
 import { authLimiter } from '../middleware/rateLimiter';
 
@@ -10,6 +10,7 @@ const router: Router = Router();
  */
 router.post('/register', register);
 router.post('/login', authLimiter, login);
+router.post('/refresh', refreshAccessToken);
 router.post('/logout', logout);
 
 /**

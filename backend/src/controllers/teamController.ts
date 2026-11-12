@@ -700,10 +700,11 @@ export const acceptInvite = async (
     // 5. Delete invitation record
     await Invitation.findByIdAndDelete(invitation._id);
 
-    // 6. Generate JWT token for seamless auto-login into this workspace
+    // 6. Generate Short Access Token (15m) and Long Refresh Token (7d)
     const jwtSecret = process.env.JWT_SECRET || 'fallback_secret_key';
-    const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-    const jwtToken = jwt.sign(
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || jwtSecret;
+
+    const accessToken = jwt.sign(
       {
         userId: user._id.toString(),
         email: user.email,
@@ -711,20 +712,47 @@ export const acceptInvite = async (
         tenantId: invitation.tenantId,
       },
       jwtSecret,
-      { expiresIn: expiresIn as any }
+      { expiresIn: '15m' }
     );
 
-    // Set HttpOnly cookie for cross-domain auth
-    res.cookie('token', jwtToken, {
+    const refreshToken = jwt.sign(
+      {
+        userId: user._id.toString(),
+        email: user.email,
+      },
+      refreshSecret,
+      { expiresIn: '7d' }
+    );
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    // Set HttpOnly cookies for cross-domain auth
+    res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie('token', accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 15 * 60 * 1000,
+    });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.status(200).json({
       success: true,
       message: 'Workspace invitation successfully accepted! Welcome to the team.',
+      accessToken,
+      token: accessToken,
+      refreshToken,
       user: {
         id: user._id.toString(),
         name: user.name,

@@ -5,28 +5,47 @@ import { Tenant } from '../models/Tenant';
 import { Invitation } from '../models/Invitation';
 import { AuthRequest, JwtPayload, UserRole } from '../types';
 
-// Cookie Options for Cross-Domain HttpOnly Authentication (Vercel <-> Render)
-const COOKIE_OPTIONS = {
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Cookie Options for Cross-Domain HttpOnly Authentication (Vercel <-> Render & Localhost)
+export const ACCESS_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: true,
-  sameSite: 'none' as const,
-  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  secure: isProduction,
+  sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+  maxAge: 15 * 60 * 1000, // 15 minutes
+};
+
+export const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
 /**
- * Generate Secure Signed JWT Token
+ * Generate Short-Lived Access Token (15m)
  */
-const generateToken = (userId: string, email: string, role: UserRole, tenantId: string): string => {
+export const generateAccessToken = (userId: string, email: string, role: UserRole, tenantId: string): string => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
     throw new Error('JWT_SECRET is not configured in environment variables');
   }
-  const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-
   return jwt.sign(
     { userId, email, role, tenantId: tenantId || '' } as JwtPayload,
     secret,
-    { expiresIn: expiresIn as any }
+    { expiresIn: '15m' }
+  );
+};
+
+/**
+ * Generate Long-Lived Refresh Token (7d)
+ */
+export const generateRefreshToken = (userId: string, email: string): string => {
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'crm_refresh_secret_key_2026';
+  return jwt.sign(
+    { userId, email },
+    refreshSecret,
+    { expiresIn: '7d' }
   );
 };
 
@@ -126,23 +145,36 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       department: userRole === 'Company Admin' ? 'Executive Management' : 'General',
     });
 
-    // Generate JWT
-    const token = generateToken(
+    // Generate Access Token (15m) and Refresh Token (7d)
+    const accessToken = generateAccessToken(
       newUser._id.toString(),
       newUser.email,
       newUser.role,
       newUser.tenantId || ''
     );
 
-    // Set JWT in HttpOnly cookie (Cross-Domain secure)
-    res.cookie('token', token, COOKIE_OPTIONS);
+    const refreshToken = generateRefreshToken(
+      newUser._id.toString(),
+      newUser.email
+    );
+
+    // Save refresh token to user document
+    newUser.refreshToken = refreshToken;
+    await newUser.save();
+
+    // Set tokens in HttpOnly cookies (Cross-Domain secure)
+    res.cookie('accessToken', accessToken, ACCESS_COOKIE_OPTIONS);
+    res.cookie('token', accessToken, ACCESS_COOKIE_OPTIONS);
+    res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS);
 
     res.status(201).json({
       success: true,
       message: userRole === 'Company Admin'
         ? `Tenant workspace provisioned successfully for ${tenantDoc?.name}.`
         : 'Employee account created successfully.',
-      token,
+      accessToken,
+      token: accessToken,
+      refreshToken,
       user: {
         id: newUser._id,
         name: newUser.name,
@@ -221,16 +253,27 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       return;
     }
 
-    // Generate JWT
-    const token = generateToken(
+    // Generate Access Token (15m) and Refresh Token (7d)
+    const accessToken = generateAccessToken(
       user._id.toString(),
       user.email,
       user.role,
       user.tenantId || ''
     );
 
-    // Set JWT in HttpOnly cookie (Cross-Domain secure)
-    res.cookie('token', token, COOKIE_OPTIONS);
+    const refreshToken = generateRefreshToken(
+      user._id.toString(),
+      user.email
+    );
+
+    // Save refresh token to user document in database
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    // Set both tokens in HttpOnly cookies (Cross-Domain secure)
+    res.cookie('accessToken', accessToken, ACCESS_COOKIE_OPTIONS);
+    res.cookie('token', accessToken, ACCESS_COOKIE_OPTIONS);
+    res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS);
 
     let tenantInfo: any = (user as any).tenant;
     if (!tenantInfo && user.tenantId) {
@@ -240,7 +283,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     res.status(200).json({
       success: true,
       message: 'Signed in successfully.',
-      token,
+      accessToken,
+      token: accessToken,
+      refreshToken,
       user: {
         id: user._id,
         name: user.name,
@@ -266,6 +311,95 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     });
   } catch (error) {
     console.error("API Error Details:", error);
+    next(error);
+  }
+};
+
+/**
+ * @route   POST /api/auth/refresh
+ * @desc    Generate a new 15-minute access token using a valid refresh token
+ * @access  Public (via HttpOnly refreshToken cookie or request body)
+ */
+export const refreshAccessToken = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const tokenFromCookie = req.cookies?.refreshToken;
+    const tokenFromBody = req.body?.refreshToken;
+    const incomingToken = tokenFromCookie || tokenFromBody;
+
+    if (!incomingToken) {
+      res.status(401).json({
+        success: false,
+        message: 'Refresh token missing. Please sign in again.',
+      });
+      return;
+    }
+
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'crm_refresh_secret_key_2026';
+    let decoded: any;
+    try {
+      decoded = jwt.verify(incomingToken, refreshSecret);
+    } catch (err: any) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid or expired refresh token. Please sign in again.',
+      });
+      return;
+    }
+
+    if (!decoded || !decoded.userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Malformed refresh token.',
+      });
+      return;
+    }
+
+    // Find the user with this exact refresh token in the database (ensures token has not been revoked)
+    const user = await User.findOne({
+      _id: decoded.userId,
+      refreshToken: incomingToken,
+    });
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: 'Refresh token revoked or user not found.',
+      });
+      return;
+    }
+
+    if (!user.isActive) {
+      res.status(403).json({
+        success: false,
+        message: 'Your account has been deactivated.',
+      });
+      return;
+    }
+
+    // Generate fresh 15-minute Access Token
+    const newAccessToken = generateAccessToken(
+      user._id.toString(),
+      user.email,
+      user.role,
+      user.tenantId || ''
+    );
+
+    // Set as HttpOnly cookie
+    res.cookie('accessToken', newAccessToken, ACCESS_COOKIE_OPTIONS);
+    res.cookie('token', newAccessToken, ACCESS_COOKIE_OPTIONS);
+
+    res.status(200).json({
+      success: true,
+      message: 'Access token refreshed successfully.',
+      accessToken: newAccessToken,
+      token: newAccessToken,
+    });
+  } catch (error) {
+    console.error('[Refresh Token Error]:', error);
     next(error);
   }
 };
@@ -297,15 +431,38 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
 
 /**
  * @route   POST /api/auth/logout
- * @desc    Logout user session and clear HttpOnly cookie
+ * @desc    Logout user session, clear cookies, and remove refreshToken from database
  * @access  Public
  */
-export const logout = async (_req: Request, res: Response): Promise<void> => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
+export const logout = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+    if (incomingRefreshToken) {
+      await User.findOneAndUpdate({ refreshToken: incomingRefreshToken }, { refreshToken: null });
+    } else if ((req as any).user?._id) {
+      await User.findByIdAndUpdate((req as any).user._id, { refreshToken: null });
+    }
+  } catch (err) {
+    console.error('[Logout Invalidation Error]:', err);
+  }
+
+  // Clear all auth cookies with matching environment flags
+  res.clearCookie('accessToken', {
+    httpOnly: ACCESS_COOKIE_OPTIONS.httpOnly,
+    secure: ACCESS_COOKIE_OPTIONS.secure,
+    sameSite: ACCESS_COOKIE_OPTIONS.sameSite,
   });
+  res.clearCookie('token', {
+    httpOnly: ACCESS_COOKIE_OPTIONS.httpOnly,
+    secure: ACCESS_COOKIE_OPTIONS.secure,
+    sameSite: ACCESS_COOKIE_OPTIONS.sameSite,
+  });
+  res.clearCookie('refreshToken', {
+    httpOnly: REFRESH_COOKIE_OPTIONS.httpOnly,
+    secure: REFRESH_COOKIE_OPTIONS.secure,
+    sameSite: REFRESH_COOKIE_OPTIONS.sameSite,
+  });
+
   res.status(200).json({
     success: true,
     message: 'Signed out successfully.',

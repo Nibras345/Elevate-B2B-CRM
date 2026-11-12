@@ -9,8 +9,8 @@ export const protect = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Extract JWT from HttpOnly cookie (primary) or fallback to Authorization header
-    let token: string | undefined = req.cookies?.token;
+    // Extract JWT from HttpOnly cookie (accessToken or token) or fallback to Authorization header
+    let token: string | undefined = req.cookies?.accessToken || req.cookies?.token;
 
     if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];

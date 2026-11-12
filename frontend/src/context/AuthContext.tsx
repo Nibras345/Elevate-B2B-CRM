@@ -143,8 +143,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      if (data.token) {
-        localStorage.setItem('nexcrm_jwt_token', data.token);
+      const token = data.accessToken || data.token;
+      if (token) {
+        localStorage.setItem('nexcrm_jwt_token', token);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+      if (data.refreshToken) {
+        localStorage.setItem('nexcrm_refresh_token', data.refreshToken);
       }
 
       const u = data.user;
@@ -227,8 +232,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      if (data.token) {
-        localStorage.setItem('nexcrm_jwt_token', data.token);
+      const token = data.accessToken || data.token;
+      if (token) {
+        localStorage.setItem('nexcrm_jwt_token', token);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+      if (data.refreshToken) {
+        localStorage.setItem('nexcrm_refresh_token', data.refreshToken);
       }
 
       const u = data.user;
@@ -283,9 +293,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Ignore network errors on logout
     }
     localStorage.removeItem('nexcrm_jwt_token');
+    localStorage.removeItem('nexcrm_refresh_token');
     localStorage.removeItem('token');
     localStorage.removeItem('nexcrm_user');
     localStorage.removeItem('nexcrm_tenant');
+    delete axios.defaults.headers.common['Authorization'];
     setUser(null);
     setTenantSettings(null);
     setIsAuthenticated(false);
