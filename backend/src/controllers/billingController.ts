@@ -69,11 +69,21 @@ export const requestSeats = async (
       return;
     }
 
-    // Determine screenshot URL from multer file or fallback body field
+    // Determine screenshot URL from multer file (Cloudinary secure_url/path or local disk)
     let screenshotUrl = '';
     if (req.file) {
-      // Relative URL accessible via static server route /uploads/...
-      screenshotUrl = `/uploads/billing/${req.file.filename}`;
+      const cloudUrl =
+        (req.file as any).path ||
+        (req.file as any).secure_url ||
+        (req.file as any).url;
+
+      if (cloudUrl && /^https?:\/\//i.test(cloudUrl)) {
+        screenshotUrl = cloudUrl;
+      } else if (req.file.filename) {
+        screenshotUrl = `/uploads/billing/${req.file.filename}`;
+      } else if (cloudUrl) {
+        screenshotUrl = cloudUrl;
+      }
     } else if (req.body.screenshotUrl) {
       screenshotUrl = req.body.screenshotUrl;
     } else if (req.body.screenshot) {

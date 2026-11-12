@@ -1,4 +1,5 @@
 import express, { Application, Request, Response } from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
@@ -24,6 +25,13 @@ import { errorHandler } from './middleware/errorMiddleware';
 dotenv.config();
 
 const app: Application = express();
+
+// Security Headers: Apply Helmet at the top of the middleware stack
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = (process.env.CLIENT_URL || 'https://elevate-b2-b-crm.vercel.app').replace(/\/+$/, '');
 
