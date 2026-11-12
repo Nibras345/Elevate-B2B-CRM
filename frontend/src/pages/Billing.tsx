@@ -66,7 +66,7 @@ export const Billing: React.FC = () => {
     const apiBase =
       (import.meta as any).env?.VITE_API_URL ||
       ((globalThis as any).process?.env?.REACT_APP_API_URL) ||
-      'http://localhost:5000';
+      'https://elevate-b2b-crm.onrender.com';
     const cleanBase = String(apiBase).replace(/\/+$/, '');
     const cleanPath = String(url).replace(/^\/+/, '');
     return `${cleanBase}/${cleanPath}`;
