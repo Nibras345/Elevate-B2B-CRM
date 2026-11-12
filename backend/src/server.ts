@@ -19,12 +19,16 @@ import notificationRoutes from './routes/notificationRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import superAdminRoutes from './routes/superAdminRoutes';
 import billingRoutes from './routes/billingRoutes';
+import { generalLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorMiddleware';
 
 // Load environment variables
 dotenv.config();
 
 const app: Application = express();
+
+// Trust reverse proxy (Render, AWS, Nginx) for accurate client IP identification in rate limiters
+app.set('trust proxy', 1);
 
 // Security Headers: Apply Helmet at the top of the middleware stack
 app.use(
@@ -88,7 +92,7 @@ if (cwdUploads !== uploadsDir && fs.existsSync(cwdUploads)) {
   app.use('/uploads', express.static(cwdUploads));
 }
 
-// Health Check Endpoint
+// Health Check Endpoint (exempt from general rate limiting)
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'online',
@@ -96,6 +100,9 @@ app.get('/api/health', (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Apply General Rate Limiter to all API endpoints
+app.use('/api', generalLimiter);
 
 // API Routes
 app.use('/api/auth', authRoutes);
