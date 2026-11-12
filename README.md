@@ -242,6 +242,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 | **Database & ODM** | **MongoDB / Mongoose 8** | NoSQL schema modeling, population, compound indexing, and aggregation |
 | **Authentication** | **JWT & Bcrypt.js** | Short 15m Access Token + 7d Refresh Token, DB-level revocation, and salted password hashing |
 | **Cookie Management**| **cookie-parser** | HttpOnly, Secure, SameSite cross-domain cookie parsing and delivery |
+| **Input Validation** | **Zod 4** | Strict type-safe schema validation middleware for API requests (`body`, `query`, `params`) |
 | **Security & Hardening** | **Helmet & Mongo-Sanitize** | HTTP security headers, NoSQL query sanitizer, and reverse proxy trust |
 | **Rate Limiting** | **express-rate-limit** | Brute-force auth limiter (5 req/15m) and general API limiter (100 req/15m) |
 | **Telemetry & Logs** | **Custom Terminal Logger** | Real-time ANSI colored HTTP request, status code, and latency telemetry |
@@ -280,7 +281,8 @@ CRM/
 │   │   │   ├── billingUpload.ts    # Multer Cloudinary storage for payment verification screenshots (crm_billing)
 │   │   │   ├── errorMiddleware.ts  # Centralized error handler
 │   │   │   ├── rateLimiter.ts      # Dual-tier rate limiting (authLimiter & generalLimiter)
-│   │   │   └── uploadMiddleware.ts # Multer Cloudinary storage for profile pictures (crm_avatars)
+│   │   │   ├── uploadMiddleware.ts # Multer Cloudinary storage for profile pictures (crm_avatars)
+│   │   │   └── validateResource.ts # Generic Zod request schema validation middleware
 │   │   ├── models/
 │   │   │   ├── Client.ts           # Enterprise client schema with lifetime value & createdBy
 │   │   │   ├── Invitation.ts       # Tokenized workspace invitation schema
@@ -292,17 +294,22 @@ CRM/
 │   │   │   └── User.ts             # User credentials, roles, workspace memberships
 │   │   ├── routes/
 │   │   │   ├── appRoutes.ts        # /api/app endpoints (sidebar badge metrics)
-│   │   │   ├── authRoutes.ts       # /api/auth endpoints (rate-limited login)
+│   │   │   ├── authRoutes.ts       # /api/auth endpoints (rate-limited login & Zod validated)
 │   │   │   ├── billingRoutes.ts    # /api/billing endpoints (seat requests & my requests)
 │   │   │   ├── clientRoutes.ts     # /api/clients endpoints
 │   │   │   ├── dashboardRoutes.ts  # /api/dashboard endpoints (stats aggregation)
 │   │   │   ├── invoiceRoutes.ts    # /api/invoices endpoints
-│   │   │   ├── leadRoutes.ts       # /api/leads endpoints
+│   │   │   ├── leadRoutes.ts       # /api/leads endpoints (Zod validated create & update)
 │   │   │   ├── notificationRoutes.ts # /api/notifications endpoints
 │   │   │   ├── superAdminRoutes.ts # /api/super-admin endpoints (stats, tenants & seat approvals)
 │   │   │   ├── teamRoutes.ts       # /api/team endpoints
 │   │   │   ├── tenantRoutes.ts     # /api/tenant endpoints
 │   │   │   └── userRoutes.ts       # /api/users endpoints
+│   │   ├── schemas/
+│   │   │   ├── auth.schema.ts      # Zod validation schemas for User registration & login
+│   │   │   ├── index.ts            # Central barrel exports for Zod schemas
+│   │   │   ├── lead.schema.ts      # Zod validation schemas for Lead creation & updates
+│   │   │   └── user.schema.ts      # User validation schema aliases
 │   │   ├── types/
 │   │   │   └── index.ts            # Global backend TypeScript interfaces
 │   │   ├── utils/
@@ -596,6 +603,7 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 17. **Dual-Layer Authentication Resilience**: Backend `protect` middleware accepts either HttpOnly cookies or `Authorization: Bearer <token>` fallback headers, guaranteeing 100% operational resilience across cross-domain environments and restrictive browser third-party cookie policies.
 18. **Concurrency-Safe Silent Token Refresh**: Axios response interceptors catch 401s, queue outbound requests, silently request new tokens via `/api/auth/refresh`, and transparently replay failed requests without interrupting user workflow.
 19. **Real-Time Request & Status Telemetry**: High-visibility terminal logger in `server.ts` outputs ANSI color-coded HTTP methods, routes, status codes, and latency in milliseconds for every API invocation.
+20. **Strict Schema-Based Request Validation (`Zod` + `validateResource`)**: Inbound payload contracts are strictly validated at the routing perimeter before hitting controller logic. Rejects malformed bodies, missing required parameters, or invalid email/password formats with `400 Bad Request` and structured error responses.
 
 ---
 
