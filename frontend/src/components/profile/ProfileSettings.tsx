@@ -109,19 +109,6 @@ export const ProfileSettings: React.FC = () => {
       return;
     }
 
-    // Retrieve JWT token from local storage
-    const token =
-      localStorage.getItem('nexcrm_jwt_token') ||
-      localStorage.getItem('token') ||
-      '';
-
-    if (!token) {
-      const errorMsg = 'Authentication token missing. Please sign in again.';
-      setPasswordStatusMessage({ type: 'error', text: errorMsg });
-      notify(errorMsg, 'error');
-      return;
-    }
-
     setIsPasswordLoading(true);
 
     try {
@@ -131,12 +118,6 @@ export const ProfileSettings: React.FC = () => {
         {
           currentPassword: passwordForm.currentPassword,
           newPassword: passwordForm.newPassword,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 
@@ -276,25 +257,11 @@ export const ProfileSettings: React.FC = () => {
       formData.append('profilePicture', selectedImageFile);
     }
 
-    // Retrieve JWT token from local storage
-    const token =
-      localStorage.getItem('nexcrm_jwt_token') ||
-      localStorage.getItem('token') ||
-      '';
-
-    if (!token) {
-      const errorMsg = 'Authentication token missing. Please log in again.';
-      setStatusMessage({ type: 'error', text: errorMsg });
-      notify(errorMsg, 'error');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
       const response = await axios.put('/api/users/profile', formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
         },
       });

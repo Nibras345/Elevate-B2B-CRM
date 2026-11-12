@@ -76,12 +76,7 @@ export const Billing: React.FC = () => {
   const fetchSeatStats = useCallback(async () => {
     try {
       setIsStatsLoading(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      if (!token) return;
-
-      const res = await axios.get('/api/tenant/stats', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.get('/api/tenant/stats');
 
       if (res.data.success) {
         setSeatStats({
@@ -100,12 +95,7 @@ export const Billing: React.FC = () => {
   const fetchMyRequests = useCallback(async () => {
     try {
       setIsRequestsLoading(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      if (!token) return;
-
-      const res = await axios.get('/api/billing/my-requests', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.get('/api/billing/my-requests');
 
       if (res.data.success && Array.isArray(res.data.seatRequests)) {
         setRequests(res.data.seatRequests);
@@ -196,7 +186,6 @@ export const Billing: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
 
       const formData = new FormData();
       formData.append('planName', selectedPlan);
@@ -209,7 +198,6 @@ export const Billing: React.FC = () => {
 
       const res = await axios.post('/api/billing/request-seats', formData, {
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
         },
       });

@@ -80,12 +80,7 @@ export const LeadsPipeline: React.FC = () => {
   useEffect(() => {
     const fetchTeamMembers = async () => {
       try {
-        const token = localStorage.getItem('nexcrm_jwt_token');
-        const response = await axios.get('/api/users', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await axios.get('/api/users');
 
         const members =
           response.data?.users ||
@@ -114,12 +109,8 @@ export const LeadsPipeline: React.FC = () => {
   const fetchLeads = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.get('/api/leads', {
         params: { page: currentPage, limit: 10 },
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.data.success) {
@@ -194,17 +185,10 @@ export const LeadsPipeline: React.FC = () => {
     }
 
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.put(
         `/api/leads/${leadId}`,
         {
           stage: targetStage,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 
@@ -247,7 +231,6 @@ export const LeadsPipeline: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.put(
         `/api/leads/${leadId}`,
         {
@@ -261,12 +244,6 @@ export const LeadsPipeline: React.FC = () => {
           country: selectedLead.country || '',
           notes: selectedLead.notes,
           tags: selectedLead.tags,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 
@@ -304,12 +281,7 @@ export const LeadsPipeline: React.FC = () => {
 
     setIsDeletingLead(true);
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      const response = await axios.delete(`/api/leads/${leadId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await axios.delete(`/api/leads/${leadId}`);
 
       if (response.data.success) {
         setLeads((prev) => prev.filter((l) => (l.id || (l as any)._id) !== leadId));
@@ -336,7 +308,6 @@ export const LeadsPipeline: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.post(
         '/api/leads',
         {
@@ -351,12 +322,6 @@ export const LeadsPipeline: React.FC = () => {
           assignedTo: newLeadForm.assignedTo,
           notes: newLeadForm.notes,
           tags: newLeadForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 

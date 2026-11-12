@@ -50,17 +50,12 @@ export const Dashboard: React.FC = () => {
     }).format(val || 0);
   };
 
-  // Fetch real-time dashboard data with JWT authentication and strict tenant isolation
+  // Fetch real-time dashboard data with strict tenant isolation
   const fetchDashboardStats = useCallback(async (showRefreshingState = false) => {
     try {
       if (showRefreshingState) setIsRefreshing(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
 
-      const response = await axios.get<DashboardData>('/api/dashboard/stats', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await axios.get<DashboardData>('/api/dashboard/stats');
 
       if (response.data && response.data.success) {
         setDashboardData(response.data);
@@ -160,14 +155,10 @@ export const Dashboard: React.FC = () => {
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
 
       const response = await axios.get(
         `/api/dashboard/export?timeframe=${encodeURIComponent(timeRange)}`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
           responseType: 'blob',
         }
       );

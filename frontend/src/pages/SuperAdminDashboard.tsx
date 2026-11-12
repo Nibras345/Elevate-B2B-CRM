@@ -94,17 +94,10 @@ export const SuperAdminDashboard: React.FC = () => {
       if (isRefresh) setIsRefreshing(true);
       else setIsLoading(true);
 
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      const authHeader = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      };
-
       const [statsRes, tenantsRes, seatRequestsRes] = await Promise.all([
-        axios.get<DashboardStatsResponse>('/api/super-admin/dashboard-stats', authHeader),
-        axios.get('/api/super-admin/tenants', authHeader),
-        axios.get('/api/super-admin/seat-requests', authHeader),
+        axios.get<DashboardStatsResponse>('/api/super-admin/dashboard-stats'),
+        axios.get('/api/super-admin/tenants'),
+        axios.get('/api/super-admin/seat-requests'),
       ]);
 
       if (statsRes.data?.success || statsRes.data?.totalRegisteredCompanies !== undefined) {
@@ -171,13 +164,10 @@ export const SuperAdminDashboard: React.FC = () => {
 
     try {
       setIsSubmittingAction(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const companyId = selectedCompany.tenantId || selectedCompany.id || selectedCompany._id;
 
       if (actionType === 'delete') {
-        const response = await axios.delete(`/api/super-admin/tenants/${companyId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await axios.delete(`/api/super-admin/tenants/${companyId}`);
 
         if (response.data?.success) {
           setTenants((prev) =>
@@ -195,8 +185,7 @@ export const SuperAdminDashboard: React.FC = () => {
         const nextStatus = selectedCompany.status === 'Suspended' ? 'Active' : 'Suspended';
         const response = await axios.patch(
           `/api/super-admin/tenants/${companyId}/status`,
-          { status: nextStatus },
-          { headers: { Authorization: `Bearer ${token}` } }
+          { status: nextStatus }
         );
 
         if (response.data?.success) {
@@ -232,12 +221,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const handleApproveSeatRequest = async (requestId: string) => {
     try {
       setApprovingRequestId(requestId);
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      const res = await axios.put(
-        `/api/super-admin/assign-seats/${requestId}`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await axios.put(`/api/super-admin/assign-seats/${requestId}`, {});
       if (res.data.success) {
         notify(res.data.message || 'Seats successfully assigned to company!', 'success');
         fetchSuperAdminData(true);
@@ -257,12 +241,9 @@ export const SuperAdminDashboard: React.FC = () => {
   const handleRejectSeatRequest = async (requestId: string) => {
     try {
       setRejectingRequestId(requestId);
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      const res = await axios.put(
-        `/api/super-admin/reject-seats/${requestId}`,
-        { reason: 'Payment could not be verified' },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await axios.put(`/api/super-admin/reject-seats/${requestId}`, {
+        reason: 'Payment could not be verified',
+      });
       if (res.data.success) {
         notify('Seat request marked as Rejected', 'info');
         fetchSuperAdminData(true);

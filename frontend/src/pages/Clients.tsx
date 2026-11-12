@@ -86,12 +86,8 @@ export const Clients: React.FC = () => {
   const fetchClients = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.get('/api/clients', {
         params: { page: currentPage, limit: 10 },
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.data.success) {
@@ -126,12 +122,7 @@ export const Clients: React.FC = () => {
 
       try {
         setIsLoadingHistory(true);
-        const token = localStorage.getItem('nexcrm_jwt_token');
-        const response = await axios.get(`/api/clients/${clientId}/history`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await axios.get(`/api/clients/${clientId}/history`);
         if (response.data.success && Array.isArray(response.data.history)) {
           setClientHistory(response.data.history);
         } else {
@@ -205,7 +196,6 @@ export const Clients: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.post(
         '/api/clients',
         {
@@ -219,12 +209,6 @@ export const Clients: React.FC = () => {
           industry: newClientForm.industry,
           address: newClientForm.address,
           city: newClientForm.city,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 
@@ -268,7 +252,6 @@ export const Clients: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.put(
         `/api/clients/${clientId}`,
         {
@@ -279,12 +262,6 @@ export const Clients: React.FC = () => {
           lifetimeValue: Number(clientToEdit.lifetimeValue ?? clientToEdit.ltv) || 0,
           status: clientToEdit.status,
           country: clientToEdit.country || '',
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 
@@ -315,12 +292,7 @@ export const Clients: React.FC = () => {
 
     setIsDeletingClient(true);
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      const response = await axios.delete(`/api/clients/${clientId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await axios.delete(`/api/clients/${clientId}`);
 
       if (response.data.success) {
         setClients((prev) => prev.filter((c) => (c.id || (c as any)._id) !== clientId));

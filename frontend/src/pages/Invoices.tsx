@@ -70,12 +70,8 @@ export const Invoices: React.FC = () => {
       const fetchClientsForInvoice = async () => {
         try {
           setIsLoadingClients(true);
-          const token = localStorage.getItem('nexcrm_jwt_token');
           const response = await axios.get('/api/clients', {
             params: { limit: 100 },
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
           });
 
           const clientList = response.data?.data || response.data?.clients || [];
@@ -113,12 +109,8 @@ export const Invoices: React.FC = () => {
   const fetchInvoices = async () => {
     try {
       setIsLoadingInvoices(true);
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.get('/api/invoices', {
         params: { page: currentPage, limit: 10 },
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.data.success) {
@@ -206,7 +198,6 @@ export const Invoices: React.FC = () => {
     const today = new Date().toISOString().split('T')[0];
 
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.post(
         '/api/invoices',
         {
@@ -229,12 +220,6 @@ export const Invoices: React.FC = () => {
           status: 'Pending',
           paymentTerms,
           notes: invoiceNotes,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 
@@ -257,16 +242,9 @@ export const Invoices: React.FC = () => {
   // Route 2: PUT /api/invoices/:id/status - Mark invoice as paid
   const handleMarkPaid = async (id: string) => {
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.put(
         `/api/invoices/${id}/status`,
-        { status: 'Paid' },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
+        { status: 'Paid' }
       );
 
       if (response.data.success) {
@@ -295,12 +273,7 @@ export const Invoices: React.FC = () => {
 
     setIsDeletingInvoice(true);
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      const response = await axios.delete(`/api/invoices/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await axios.delete(`/api/invoices/${id}`);
 
       if (response.data.success) {
         setInvoices(prev => prev.filter(inv => inv.id !== id && (inv as any)._id !== id));

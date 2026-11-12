@@ -73,15 +73,10 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
   // Fetch dynamic notifications from backend
   const fetchNotifications = async () => {
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      if (!token) return;
+      if (!user) return;
 
       setIsLoadingNotifications(true);
-      const response = await axios.get('/api/notifications', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await axios.get('/api/notifications');
 
       if (response.data.success && Array.isArray(response.data.notifications)) {
         const fetched = response.data.notifications;
@@ -132,18 +127,9 @@ export const Navbar: React.FC<NavbarProps> = ({ setIsMobileOpen, onOpenSearch })
 
   const markAllNotificationsAsRead = async () => {
     try {
-      const token = localStorage.getItem('nexcrm_jwt_token');
-      if (!token) return;
+      if (!user) return;
 
-      const response = await axios.put(
-        '/api/notifications/mark-all-read',
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await axios.put('/api/notifications/mark-all-read', {});
 
       if (response.data.success) {
         setUnreadCount(0);

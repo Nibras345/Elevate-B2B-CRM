@@ -5,6 +5,14 @@ import { Tenant } from '../models/Tenant';
 import { Invitation } from '../models/Invitation';
 import { AuthRequest, JwtPayload, UserRole } from '../types';
 
+// Cookie Options for Cross-Domain HttpOnly Authentication (Vercel <-> Render)
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none' as const,
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+};
+
 /**
  * Generate Secure Signed JWT Token
  */
@@ -126,6 +134,9 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       newUser.tenantId || ''
     );
 
+    // Set JWT in HttpOnly cookie (Cross-Domain secure)
+    res.cookie('token', token, COOKIE_OPTIONS);
+
     res.status(201).json({
       success: true,
       message: userRole === 'Company Admin'
@@ -218,6 +229,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       user.tenantId || ''
     );
 
+    // Set JWT in HttpOnly cookie (Cross-Domain secure)
+    res.cookie('token', token, COOKIE_OPTIONS);
+
     let tenantInfo: any = (user as any).tenant;
     if (!tenantInfo && user.tenantId) {
       tenantInfo = await Tenant.findOne({ tenantId: user.tenantId });
@@ -283,10 +297,15 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
 
 /**
  * @route   POST /api/auth/logout
- * @desc    Logout user session
+ * @desc    Logout user session and clear HttpOnly cookie
  * @access  Public
  */
 export const logout = async (_req: Request, res: Response): Promise<void> => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+  });
   res.status(200).json({
     success: true,
     message: 'Signed out successfully.',

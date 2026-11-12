@@ -123,14 +123,7 @@ export const Settings: React.FC = () => {
   const fetchSeatStats = async () => {
     try {
       setIsSeatStatsLoading(true);
-      const activeToken = localStorage.getItem('nexcrm_jwt_token');
-      if (!activeToken) return;
-
-      const response = await axios.get('/api/tenant/stats', {
-        headers: {
-          Authorization: `Bearer ${activeToken}`,
-        },
-      });
+      const response = await axios.get('/api/tenant/stats');
 
       if (response.data.success) {
         setSeatStats({
@@ -155,12 +148,7 @@ export const Settings: React.FC = () => {
     setIsTeamLoading(true);
     setTeamError(null);
     try {
-      const activeToken = localStorage.getItem('nexcrm_jwt_token');
-      const response = await axios.get('/api/team', {
-        headers: {
-          Authorization: `Bearer ${activeToken}`,
-        },
-      });
+      const response = await axios.get('/api/team');
 
       if (response.data.success && Array.isArray(response.data.team)) {
         setTeam(response.data.team);
@@ -218,19 +206,12 @@ export const Settings: React.FC = () => {
 
     setIsInviting(true);
     try {
-      const activeToken = localStorage.getItem('nexcrm_jwt_token');
       const response = await axios.post(
         '/api/team/invite',
         {
           email: inviteForm.email.trim(),
           role: inviteForm.role,
           department: inviteForm.department.trim() || 'General',
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${activeToken}`,
-            'Content-Type': 'application/json',
-          },
         }
       );
 
@@ -278,12 +259,7 @@ export const Settings: React.FC = () => {
     setIsDeletingMember(true);
     setDeletingMemberId(targetId);
     try {
-      const activeToken = localStorage.getItem('nexcrm_jwt_token');
-      const response = await axios.delete(`/api/team/${targetId}`, {
-        headers: {
-          Authorization: `Bearer ${activeToken}`,
-        },
-      });
+      const response = await axios.delete(`/api/team/${targetId}`);
 
       if (response.data.success) {
         notify(response.data.message || 'Member removed successfully', 'success');

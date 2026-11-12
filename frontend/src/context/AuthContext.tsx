@@ -31,7 +31,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('nexcrm_jwt_token'));
+  const [token] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [user, setUser] = useState<UserProfile | null>(() => {
@@ -45,29 +45,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return Boolean(localStorage.getItem('nexcrm_jwt_token'));
+    return Boolean(localStorage.getItem('nexcrm_user'));
   });
 
-  // Verify JWT Token with Backend on Mount
+  // Verify authentication with backend on mount via HttpOnly cookie or token fallback
   useEffect(() => {
-    const verifyToken = async () => {
-      const savedToken = localStorage.getItem('nexcrm_jwt_token');
-      if (!savedToken) {
-        setIsLoading(false);
-        setIsAuthenticated(false);
-        setUser(null);
-        setTenantSettings(null);
-        localStorage.removeItem('nexcrm_user');
-        localStorage.removeItem('nexcrm_tenant');
-        return;
-      }
-
+    const verifyAuth = async () => {
       try {
-        const res = await axios.get('/api/auth/me', {
-          headers: {
-            Authorization: `Bearer ${savedToken}`,
-          },
-        });
+        const res = await axios.get('/api/auth/me');
         const data = res.data;
 
         if (res.status === 200 && data.success && data.user) {
@@ -106,23 +91,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
           setIsAuthenticated(true);
         } else {
-          // Token invalid or expired
-          localStorage.removeItem('nexcrm_jwt_token');
-          localStorage.removeItem('nexcrm_user');
-          localStorage.removeItem('nexcrm_tenant');
-          setToken(null);
           setUser(null);
           setTenantSettings(null);
           setIsAuthenticated(false);
+          localStorage.removeItem('nexcrm_user');
+          localStorage.removeItem('nexcrm_tenant');
+          localStorage.removeItem('nexcrm_jwt_token');
         }
       } catch (err) {
-        console.warn('Backend authentication check failed:', err);
+        // Not authenticated or session expired
+        setUser(null);
+        setTenantSettings(null);
+        setIsAuthenticated(false);
+        localStorage.removeItem('nexcrm_user');
+        localStorage.removeItem('nexcrm_tenant');
+        localStorage.removeItem('nexcrm_jwt_token');
       } finally {
         setIsLoading(false);
       }
     };
 
-    verifyToken();
+    verifyAuth();
   }, []);
 
   // Sync state to localStorage
@@ -154,9 +143,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      const jwtToken = data.token;
-      localStorage.setItem('nexcrm_jwt_token', jwtToken);
-      setToken(jwtToken);
+      if (data.token) {
+        localStorage.setItem('nexcrm_jwt_token', data.token);
+      }
 
       const u = data.user;
       const t = data.tenant;
@@ -238,9 +227,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
       }
 
-      const jwtToken = data.token;
-      localStorage.setItem('nexcrm_jwt_token', jwtToken);
-      setToken(jwtToken);
+      if (data.token) {
+        localStorage.setItem('nexcrm_jwt_token', data.token);
+      }
 
       const u = data.user;
       const t = data.tenant;
@@ -294,9 +283,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Ignore network errors on logout
     }
     localStorage.removeItem('nexcrm_jwt_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('nexcrm_user');
     localStorage.removeItem('nexcrm_tenant');
-    setToken(null);
     setUser(null);
     setTenantSettings(null);
     setIsAuthenticated(false);

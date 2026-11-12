@@ -10,6 +10,15 @@ const baseURL =
 axios.defaults.baseURL = baseURL;
 axios.defaults.withCredentials = true;
 
+// Automatically inject Authorization header if token exists (resilient fallback for cross-domain cookie blocks)
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('nexcrm_jwt_token');
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Create and export a dedicated, strongly-typed Axios instance
 export const api = axios.create({
   baseURL,
@@ -17,6 +26,14 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('nexcrm_jwt_token');
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export default api;

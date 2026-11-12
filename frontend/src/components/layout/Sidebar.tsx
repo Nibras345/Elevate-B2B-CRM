@@ -55,14 +55,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const fetchSeatStats = async () => {
       try {
         setIsLoadingSeats(true);
-        const token = localStorage.getItem('nexcrm_jwt_token');
-        if (!token) return;
+        if (!user?.tenantId) return;
 
-        const response = await axios.get('/api/tenant/stats', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await axios.get('/api/tenant/stats');
 
         if (response.data.success) {
           setSeatStats({
@@ -94,14 +89,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   useEffect(() => {
     const fetchSidebarStats = async () => {
       try {
-        const token = localStorage.getItem('nexcrm_jwt_token');
-        if (!token) return;
+        if (!user?.tenantId) return;
 
-        const response = await axios.get('/api/app/sidebar-stats', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await axios.get('/api/app/sidebar-stats');
 
         if (response.data.success) {
           setSidebarStats({

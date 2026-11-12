@@ -714,10 +714,17 @@ export const acceptInvite = async (
       { expiresIn: expiresIn as any }
     );
 
+    // Set HttpOnly cookie for cross-domain auth
+    res.cookie('token', jwtToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
     res.status(200).json({
       success: true,
       message: 'Workspace invitation successfully accepted! Welcome to the team.',
-      token: jwtToken,
       user: {
         id: user._id.toString(),
         name: user.name,
