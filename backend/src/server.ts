@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import mongoSanitize from 'express-mongo-sanitize';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -69,6 +70,9 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Data Sanitization against NoSQL Query Injection (removes $ and dot characters from body, params, query)
+app.use(mongoSanitize());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
