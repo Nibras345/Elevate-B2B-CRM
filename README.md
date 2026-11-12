@@ -11,8 +11,10 @@
 [![Vercel](https://img.shields.io/badge/Vercel-Live%20Frontend-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://elevate-b2-b-crm.vercel.app)
 [![Cloudinary](https://img.shields.io/badge/Cloudinary-Media%20CDN-3448C5?style=for-the-badge&logo=cloudinary&logoColor=white)](https://cloudinary.com/)
 [![Security](https://img.shields.io/badge/Security-Hardened%20(Helmet%20%2B%20RateLimit%20%2B%20NoSQL%20Sanitized)-blueviolet?style=for-the-badge)](https://expressjs.com/)
+[![JWT Auth](https://img.shields.io/badge/JWT-Short%20Access%20(15m)%20%2B%20Long%20Refresh%20(7d)-crimson?style=for-the-badge)](https://jwt.io/)
+[![Cookies](https://img.shields.io/badge/Cookies-HttpOnly%20%2B%20SameSite%20Protected-brightgreen?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies)
 
-An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM) platform engineered with the MERN stack and TypeScript. Elevate B2B CRM delivers robust workspace data isolation, granular Role-Based Access Control (RBAC), strict 5-seat capacity governance with manual local payment upgrades (JazzCash & Easypaisa), transactional email-driven member onboarding, automated Won/Closed lead-to-client conversions, universal deletion confirmation modals, pipeline revenue forecasting, client relationship databases, a fully database-driven invoicing ledger, Cloudinary media storage, enterprise security hardening (Helmet, express-rate-limit, express-mongo-sanitize), and real-time Super Admin platform telemetry.
+An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM) platform engineered with the MERN stack and TypeScript. Elevate B2B CRM delivers robust workspace data isolation, granular Role-Based Access Control (RBAC), strict 5-seat capacity governance with manual local payment upgrades (JazzCash & Easypaisa), short-lived access token (15m) & long-lived refresh token (7d) security with HttpOnly cookies and silent Axios refresh interceptors, transactional email-driven member onboarding, automated Won/Closed lead-to-client conversions, universal deletion confirmation modals, pipeline revenue forecasting, client relationship databases, a fully database-driven invoicing ledger, Cloudinary media storage, enterprise security hardening (Helmet, express-rate-limit, express-mongo-sanitize), and real-time Super Admin platform telemetry.
 
 > ### 🌐 Live Production Deployments
 > - **Web Application (Vercel Frontend)**: [https://elevate-b2-b-crm.vercel.app](https://elevate-b2-b-crm.vercel.app)
@@ -195,10 +197,33 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **HTTP Security Headers (`helmet`)**: Configured at the top of Express middleware pipeline with Cross-Origin Resource Policy (`cross-origin`), hardening the API against clickjacking, cross-site scripting (XSS), MIME type sniffing, and insecure transport vulnerabilities.
 - **Reverse Proxy IP Trust (`app.set('trust proxy', 1)`)**: Configured globally in `server.ts` to accurately resolve genuine client IP addresses through Render, AWS, or Nginx load balancers and reverse proxies, ensuring rate limiters identify individual bad actors without penalizing shared proxy IPs.
 - **Dual-Tier Dynamic Rate Limiting (`express-rate-limit`)**:
-  - **Auth Rate Limiter (`authLimiter`)**: Strictly limits `POST /api/auth/login` to **5 requests per 15 minutes** per IP address, responding with `429 Too Many Requests` (`"Too many login attempts from this IP, please try again after 15 minutes."`) with standard RFC headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`). Completely neutralizes brute-force attacks and credential stuffing.
-  - **General API Limiter (`generalLimiter`)**: Enforces a threshold of **100 requests per 15 minutes** per IP across all `/api/*` endpoints, preventing Distributed Denial of Service (DDoS) and API abuse. The `/api/health` heartbeat route is explicitly exempt.
+  - **Auth Rate Limiter (`authLimiter`)**: Strictly limits failed login attempts to **5 attempts per 15 minutes** per IP address in production, responding with `429 Too Many Requests` (`"Too many login attempts from this IP, please try again after 15 minutes."`) with standard RFC headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`). Employs `skipSuccessfulRequests: true` so valid authentications never consume the limit, completely neutralizing brute-force credential stuffing.
+  - **General API Limiter (`generalLimiter`)**: Enforces a threshold of **100 requests per 15 minutes** per IP across all `/api/*` endpoints (relaxed in development), preventing Distributed Denial of Service (DDoS) and API spam. The `/api/health` heartbeat route and CORS preflight `OPTIONS` requests are explicitly exempt.
 - **NoSQL Query Injection Sanitization (`express-mongo-sanitize`)**: Mounted immediately after `express.json()` and `express.urlencoded()` body parsers. Proactively sanitizes `req.body`, `req.query`, and `req.params` by stripping any prohibited characters (such as `$` and `.`), preventing MongoDB operator injection attacks like `{"$gt": ""}`.
-- **Strict Cross-Origin Resource Sharing (CORS)**: Strict origin whitelist restricting access exclusively to trusted environments (`https://elevate-b2-b-crm.vercel.app`, `http://localhost:5173`, `http://localhost:3000`) with `credentials: true` for secure cookies and authorization headers.
+- **Strict Cross-Origin Resource Sharing (CORS)**: Dynamically verifies origins across production (`https://elevate-b2-b-crm.vercel.app`), local development ports (`http://localhost:5173`, `http://localhost:5174`, `http://localhost:3000`, and `127.0.0.1`), and Vercel preview deployments, configuring `credentials: true` for secure cookies and headers (`Authorization`, `Content-Type`, `X-Requested-With`, `Accept`, `Origin`).
+- **Real-Time Visual Terminal Logger**: Custom development and production telemetry middleware in `server.ts` logging every incoming API request with method, endpoint, ANSI color-coded status codes (Green for 2xx, Cyan for 3xx, Yellow for 4xx, Red for 5xx), and execution duration in milliseconds.
+
+### 🔐 18. Short Access Token (15m) & Long Refresh Token (7d) Architecture
+- **Short-Lived Access Token (15m)**: Generated upon login and registration, signed with `JWT_SECRET`, and carrying user identity, active role, and tenant context. Short lifespan limits exposure in the event of client-side leakage.
+- **Long-Lived Refresh Token (7d)**: Generated and signed with `JWT_REFRESH_SECRET` (or `JWT_SECRET`). Securely persisted to the database on `User.refreshToken` to track active sessions.
+- **Instant Server-Side RBAC Revocation**: Because refresh tokens are verified against MongoDB on every rotation, administrators or users can immediately revoke active sessions by nullifying the user's `refreshToken` in the database, blocking unauthorized access within 15 minutes or instantly upon token refresh.
+- **Cross-Domain HttpOnly Cookies**: Both tokens are dispatched in secure HttpOnly cookies (`accessToken` with 15m `maxAge` and `refreshToken` with 7d `maxAge`). Uses environment-aware security flags:
+  - **Production (Render <-> Vercel)**: `secure: true`, `sameSite: 'none'`, `httpOnly: true`.
+  - **Development (Localhost)**: `secure: false`, `sameSite: 'lax'`, `httpOnly: true` (preventing browser cookie drop on plain HTTP).
+- **Dual-Layer Authentication Resilience**: To guarantee 100% reliability in browsers blocking third-party cross-site cookies (e.g. Chrome 120+ third-party cookie restrictions between `localhost` and `onrender.com`), the backend also returns tokens in the response JSON, and the frontend automatically attaches an `Authorization: Bearer <token>` fallback header via Axios. The `protect` middleware checks both cookies and headers seamlessly:
+  ```typescript
+  let token = req.cookies?.accessToken || req.cookies?.token;
+  if (!token && req.headers.authorization?.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+  ```
+- **Silent Refresh Interceptor with Concurrency Queue (`frontend/src/api/axios.ts`)**:
+  - Automatically intercepts any `401 Unauthorized` API response caused by access token expiration.
+  - Pauses failed requests in a concurrency-safe promise queue (`failedQueue`) to prevent token refresh race conditions when multiple API calls fail simultaneously.
+  - Silently dispatches a single POST request to `/api/auth/refresh` using the HttpOnly refresh cookie (with fallback request body).
+  - On success, updates `localStorage`, `axios.defaults.headers.common['Authorization']`, and replays all queued requests seamlessly without user awareness or page reload.
+  - If the refresh token is also expired or revoked, clears session storage and safely redirects the user to `/login`.
+- **Session Termination (`POST /api/auth/logout`)**: Clears both `accessToken` and `refreshToken` cookies from the browser with matching domain and security flags, removes the `refreshToken` from the user's MongoDB record, and deletes local client tokens.
 
 ---
 
@@ -211,13 +236,15 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 | **Styling & UI** | **Tailwind CSS 3** | Utility-first styling with dark/light mode and custom theme tokens |
 | **Data Visualization** | **Recharts 3** | Interactive responsive line charts, tooltips, and Cartesian analytics |
 | **Iconography** | **Lucide React** | Consistent, modern SVG icon system |
-| **HTTP Client** | **Axios** | Centralized client (`src/api/axios.ts`) with Render fallback & `withCredentials` |
+| **HTTP Client** | **Axios 1.7+** | Centralized client (`src/api/axios.ts`) with concurrency-safe 401 silent refresh interceptors |
 | **Backend Runtime** | **Node.js (v20+)** | ES Module runtime executed with TypeScript `tsx` |
 | **API Framework** | **Express.js 4** | Modular routing, typed request handlers, and middleware |
 | **Database & ODM** | **MongoDB / Mongoose 8** | NoSQL schema modeling, population, compound indexing, and aggregation |
-| **Authentication** | **JWT & Bcrypt.js** | Stateless Bearer token auth with salted password hashing |
+| **Authentication** | **JWT & Bcrypt.js** | Short 15m Access Token + 7d Refresh Token, DB-level revocation, and salted password hashing |
+| **Cookie Management**| **cookie-parser** | HttpOnly, Secure, SameSite cross-domain cookie parsing and delivery |
 | **Security & Hardening** | **Helmet & Mongo-Sanitize** | HTTP security headers, NoSQL query sanitizer, and reverse proxy trust |
 | **Rate Limiting** | **express-rate-limit** | Brute-force auth limiter (5 req/15m) and general API limiter (100 req/15m) |
+| **Telemetry & Logs** | **Custom Terminal Logger** | Real-time ANSI colored HTTP request, status code, and latency telemetry |
 | **File Storage** | **Multer & Cloudinary** | Cloud CDN media for avatars (`crm_avatars`) and billing proofs (`crm_billing`) |
 | **Email Service** | **Nodemailer** | SMTP transporter for invitations and recovery codes |
 | **Production Hosting** | **Vercel & Render** | Frontend on Vercel Edge; Backend on Render Web Service; DB on MongoDB Atlas |
@@ -376,9 +403,10 @@ cd Elevate-B2B-CRM
    # MongoDB Database
    MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/CRM?retryWrites=true&w=majority
 
-   # JWT Security
-   JWT_SECRET=super_secret_jwt_cryptographic_key_here
-   JWT_EXPIRES_IN=7d
+   # JWT Security & Refresh Token Rotation
+   JWT_SECRET=super_secret_jwt_access_cryptographic_key_here
+   JWT_REFRESH_SECRET=super_secret_jwt_refresh_cryptographic_key_here
+   JWT_EXPIRES_IN=15m
 
    # Cloudinary Media Upload (For user profile avatars & manual billing payment receipts)
    CLOUDINARY_CLOUD_NAME=your_cloud_name
@@ -440,11 +468,14 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/health` | Public | Real-time server health and service uptime heartbeat (exempt from rate limit) |
 
-### 🔐 Authentication (`/api/auth`)
+### 🔐 Authentication & Session Security (`/api/auth`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | Public | Role-based registration (`Company Admin` provisions Tenant; `Employee` creates user) |
-| `POST` | `/api/auth/login` | Public (Rate Limited) | Authenticate user credentials and return JWT (strictly limited to 5 attempts / 15 min per IP) |
+| `POST` | `/api/auth/register` | Public | Role-based registration (`Company Admin` provisions Tenant; `Employee` creates user), sets HttpOnly tokens |
+| `POST` | `/api/auth/login` | Public (Rate Limited) | Authenticate credentials; issues 15m Access Token & 7d Refresh Token in HttpOnly cookies + JSON (max 5 failed attempts / 15m) |
+| `POST` | `/api/auth/refresh` | Public | Generate fresh 15m Access Token using verified 7d Refresh Token (from HttpOnly cookie or body fallback) |
+| `POST` | `/api/auth/logout` | Public | End session, clear HttpOnly cookies, and revoke refresh token in MongoDB |
+| `GET` | `/api/auth/me` | Private | Verify authentication and fetch current user profile and workspace tenant context |
 | `POST` | `/api/auth/forgot-password` | Public | Request password recovery reset OTP via email |
 | `POST` | `/api/auth/reset-password` | Public | Reset password using verified recovery OTP |
 
@@ -560,6 +591,11 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
     - **General API Defense**: Max 100 requests per 15 minutes across all `/api/*` endpoints to eliminate API abuse and denial-of-service threats.
 13. **Reverse Proxy Trust Verification**: Configured `app.set('trust proxy', 1)` enables accurate client IP identification through Render, AWS, and Nginx reverse proxies.
 14. **Persistent Cloudinary Audit Storage**: Financial receipts and payment verification screenshots are streamed directly to Cloudinary (`crm_billing`), guaranteeing zero data loss across ephemeral cloud container lifecycles.
+15. **Short-Lived Access & Long Refresh Token Lifecycle**: Issues 15-minute Access Tokens and 7-day Refresh Tokens. Refresh tokens are persisted to MongoDB (`User.refreshToken`), enabling instant server-side session revocation on logout or role updates.
+16. **HttpOnly & SameSite Cookie Transport**: Transports authentication tokens via secure HttpOnly cookies (`accessToken` and `refreshToken`), shielding credentials from malicious client-side JavaScript (XSS) extraction.
+17. **Dual-Layer Authentication Resilience**: Backend `protect` middleware accepts either HttpOnly cookies or `Authorization: Bearer <token>` fallback headers, guaranteeing 100% operational resilience across cross-domain environments and restrictive browser third-party cookie policies.
+18. **Concurrency-Safe Silent Token Refresh**: Axios response interceptors catch 401s, queue outbound requests, silently request new tokens via `/api/auth/refresh`, and transparently replay failed requests without interrupting user workflow.
+19. **Real-Time Request & Status Telemetry**: High-visibility terminal logger in `server.ts` outputs ANSI color-coded HTTP methods, routes, status codes, and latency in milliseconds for every API invocation.
 
 ---
 
