@@ -7,8 +7,17 @@
 [![Express.js](https://img.shields.io/badge/Express.js-v4.21-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v3.4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Vite](https://img.shields.io/badge/Vite-v8.3-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Render](https://img.shields.io/badge/Render-Live%20Backend-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://elevate-b2b-crm.onrender.com)
+[![Vercel](https://img.shields.io/badge/Vercel-Live%20Frontend-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://elevate-b2-b-crm.vercel.app)
+[![Cloudinary](https://img.shields.io/badge/Cloudinary-Media%20CDN-3448C5?style=for-the-badge&logo=cloudinary&logoColor=white)](https://cloudinary.com/)
+[![Security](https://img.shields.io/badge/Security-Hardened%20(Helmet%20%2B%20RateLimit%20%2B%20NoSQL%20Sanitized)-blueviolet?style=for-the-badge)](https://expressjs.com/)
 
-An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM) platform engineered with the MERN stack and TypeScript. Elevate B2B CRM delivers robust workspace data isolation, granular Role-Based Access Control (RBAC), strict 5-seat capacity governance with manual local payment upgrades (JazzCash & Easypaisa), transactional email-driven member onboarding, automated Won/Closed lead-to-client conversions, universal deletion confirmation modals, pipeline revenue forecasting, client relationship databases, a fully database-driven invoicing ledger, and real-time Super Admin platform telemetry.
+An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM) platform engineered with the MERN stack and TypeScript. Elevate B2B CRM delivers robust workspace data isolation, granular Role-Based Access Control (RBAC), strict 5-seat capacity governance with manual local payment upgrades (JazzCash & Easypaisa), transactional email-driven member onboarding, automated Won/Closed lead-to-client conversions, universal deletion confirmation modals, pipeline revenue forecasting, client relationship databases, a fully database-driven invoicing ledger, Cloudinary media storage, enterprise security hardening (Helmet, express-rate-limit, express-mongo-sanitize), and real-time Super Admin platform telemetry.
+
+> ### 🌐 Live Production Deployments
+> - **Web Application (Vercel Frontend)**: [https://elevate-b2-b-crm.vercel.app](https://elevate-b2-b-crm.vercel.app)
+> - **API Service (Render Backend)**: [https://elevate-b2b-crm.onrender.com](https://elevate-b2b-crm.onrender.com)
+> - **Health & Uptime Monitoring**: [https://elevate-b2b-crm.onrender.com/api/health](https://elevate-b2b-crm.onrender.com/api/health)
 
 ---
 
@@ -58,7 +67,8 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - **Default Plan**: 5 Workspace Seats (Forever Free) — Active by default for all workspaces.
   - **Per Seat Plan**: $15 / seat for custom granular scaling.
   - **Bundle Plan**: $55 / 5 seats ($11/seat effective rate, 27% savings).
-- **Multipart Payment Proof Upload**: Multer disk-storage upload middleware (`/uploads/billing/`) with 10MB file limit, image mime validation, static asset serving via Express (`app.use('/uploads', express.static(...))`), and Vite dev-server `/uploads` reverse proxy with URL sanitization (preventing double slashes and resolving port 5000 static routes).
+- **Multipart Payment Proof Cloud Upload (Cloudinary + Multer)**: Robust dual-storage upload pipeline (`backend/src/middleware/billingUpload.ts`). Directly routes payment proof receipts to Cloudinary cloud storage under the dedicated `crm_billing` folder with a 10MB limit, image MIME type validation (`JPG`, `PNG`, `WEBP`), and auto-transformation (`1600x1600`, quality auto).
+- **Ephemeral Storage Immunity & CDN Acceleration**: Offloading receipts directly to Cloudinary eliminates payment screenshot loss across Render container deployments and server restarts, while serving verification screenshots instantly to the Super Admin via Cloudinary's high-speed global CDN. Features resilient automatic fallback to local disk storage (`/uploads/billing/`) for offline development environments.
 - **Company Admin Billing Hub (`/billing`)**: Dedicated billing interface for Company Admins displaying current seat utilization, plan cards, interactive calculation modal, JazzCash/Easypaisa payment details, screenshot uploader, and request status history.
 - **Super Admin Seat Assignment Console**: Dedicated `Seat Assignments` tab on `/super-admin` with pending request counters, clickable full-size screenshot verification modals, and 1-click `Approve` (dynamically increments `tenant.maxSeats`) and `Reject` actions.
 - **Dynamic Capacity Unlock**: Approving a request immediately increments `tenant.maxSeats` and notifies the tenant via `Notification`, allowing the Company Admin to invite new teammates up to their expanded capacity limit without breaking strict seat boundaries.
@@ -126,6 +136,13 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Tab Navigation**:
   - **Registered Companies**: Directory of workspaces, seat progress indicator (`seatsUsed / maxSeats`), live company revenue, and operational toggles (Suspend / Delete).
   - **Seat Assignments**: Data table of customer seat upgrade requests with receipt verification modals and 1-click Approve / Reject actions.
+- **Dual-Resolution Workspace Deletion**: `DELETE /api/super-admin/tenants/:id` seamlessly resolves workspaces passed either as custom string codes (e.g., `"TNT-DIGI-1393"`) or MongoDB `ObjectId`s (`Tenant.findOne({ tenantId })` with fallback to `Tenant.findById()`).
+- **Strict Schema-Typed Cascading Deletes**: When a tenant is deleted, all associated resources are purged matching their exact schema types to prevent Mongoose `CastError` failures:
+  - `SeatRequest`, `Invoice`: strictly cleared via `tenantId: tenant._id` (ObjectId).
+  - `Lead`, `Notification`: cleared via `$or: [{ tenantId: tenant._id }, { tenantCode }]`.
+  - `Client`: cleared via `$or: [{ tenantId: tenant._id }, { tenantCode }]`.
+  - `User`: cleans up matching `tenantId`, `tenant`, `tenantIds`, `tenants`, and nested `workspaces` arrays.
+  - Finally, deletes the `Tenant` document itself cleanly within an isolated `try...catch` block.
 
 ### 🧭 11. Dynamic Sidebar Notification Badges & Live Metrics
 - **Real-Time Tenant Metrics**: The sidebar notification badges dynamically query the backend (`GET /api/app/sidebar-stats`) to display real-time counts of actionable items isolated to the authenticated tenant.
@@ -174,6 +191,15 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - `Employee` roles can ONLY update or delete records they personally created.
   - Unauthorized modifications or deletions immediately return `403 Forbidden` (`"Unauthorized. You can only modify your own records."`).
 
+### 🛡️ 17. Production Security Hardening & Zero-Trust Defense
+- **HTTP Security Headers (`helmet`)**: Configured at the top of Express middleware pipeline with Cross-Origin Resource Policy (`cross-origin`), hardening the API against clickjacking, cross-site scripting (XSS), MIME type sniffing, and insecure transport vulnerabilities.
+- **Reverse Proxy IP Trust (`app.set('trust proxy', 1)`)**: Configured globally in `server.ts` to accurately resolve genuine client IP addresses through Render, AWS, or Nginx load balancers and reverse proxies, ensuring rate limiters identify individual bad actors without penalizing shared proxy IPs.
+- **Dual-Tier Dynamic Rate Limiting (`express-rate-limit`)**:
+  - **Auth Rate Limiter (`authLimiter`)**: Strictly limits `POST /api/auth/login` to **5 requests per 15 minutes** per IP address, responding with `429 Too Many Requests` (`"Too many login attempts from this IP, please try again after 15 minutes."`) with standard RFC headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`). Completely neutralizes brute-force attacks and credential stuffing.
+  - **General API Limiter (`generalLimiter`)**: Enforces a threshold of **100 requests per 15 minutes** per IP across all `/api/*` endpoints, preventing Distributed Denial of Service (DDoS) and API abuse. The `/api/health` heartbeat route is explicitly exempt.
+- **NoSQL Query Injection Sanitization (`express-mongo-sanitize`)**: Mounted immediately after `express.json()` and `express.urlencoded()` body parsers. Proactively sanitizes `req.body`, `req.query`, and `req.params` by stripping any prohibited characters (such as `$` and `.`), preventing MongoDB operator injection attacks like `{"$gt": ""}`.
+- **Strict Cross-Origin Resource Sharing (CORS)**: Strict origin whitelist restricting access exclusively to trusted environments (`https://elevate-b2-b-crm.vercel.app`, `http://localhost:5173`, `http://localhost:3000`) with `credentials: true` for secure cookies and authorization headers.
+
 ---
 
 ## 🛠️ Technology Stack
@@ -185,13 +211,16 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 | **Styling & UI** | **Tailwind CSS 3** | Utility-first styling with dark/light mode and custom theme tokens |
 | **Data Visualization** | **Recharts 3** | Interactive responsive line charts, tooltips, and Cartesian analytics |
 | **Iconography** | **Lucide React** | Consistent, modern SVG icon system |
-| **HTTP Client** | **Axios** | Interceptors, Bearer token injection, and multipart/form-data upload |
+| **HTTP Client** | **Axios** | Centralized client (`src/api/axios.ts`) with Render fallback & `withCredentials` |
 | **Backend Runtime** | **Node.js (v20+)** | ES Module runtime executed with TypeScript `tsx` |
 | **API Framework** | **Express.js 4** | Modular routing, typed request handlers, and middleware |
 | **Database & ODM** | **MongoDB / Mongoose 8** | NoSQL schema modeling, population, compound indexing, and aggregation |
 | **Authentication** | **JWT & Bcrypt.js** | Stateless Bearer token auth with salted password hashing |
-| **File Storage** | **Multer & Cloudinary** | Dual storage: Multer disk storage for payment receipts, Cloudinary for profile pictures |
+| **Security & Hardening** | **Helmet & Mongo-Sanitize** | HTTP security headers, NoSQL query sanitizer, and reverse proxy trust |
+| **Rate Limiting** | **express-rate-limit** | Brute-force auth limiter (5 req/15m) and general API limiter (100 req/15m) |
+| **File Storage** | **Multer & Cloudinary** | Cloud CDN media for avatars (`crm_avatars`) and billing proofs (`crm_billing`) |
 | **Email Service** | **Nodemailer** | SMTP transporter for invitations and recovery codes |
+| **Production Hosting** | **Vercel & Render** | Frontend on Vercel Edge; Backend on Render Web Service; DB on MongoDB Atlas |
 
 ---
 
@@ -221,9 +250,10 @@ CRM/
 │   │   │   └── userController.ts   # Profile updates, password modification, team members
 │   │   ├── middleware/
 │   │   │   ├── authMiddleware.ts   # JWT verification, tenant isolation guard, requireAdmin, requireSuperAdmin
-│   │   │   ├── billingUpload.ts    # Multer disk-storage for payment verification screenshots
+│   │   │   ├── billingUpload.ts    # Multer Cloudinary storage for payment verification screenshots (crm_billing)
 │   │   │   ├── errorMiddleware.ts  # Centralized error handler
-│   │   │   └── uploadMiddleware.ts # Multer Cloudinary storage for profile pictures
+│   │   │   ├── rateLimiter.ts      # Dual-tier rate limiting (authLimiter & generalLimiter)
+│   │   │   └── uploadMiddleware.ts # Multer Cloudinary storage for profile pictures (crm_avatars)
 │   │   ├── models/
 │   │   │   ├── Client.ts           # Enterprise client schema with lifetime value & createdBy
 │   │   │   ├── Invitation.ts       # Tokenized workspace invitation schema
@@ -235,7 +265,7 @@ CRM/
 │   │   │   └── User.ts             # User credentials, roles, workspace memberships
 │   │   ├── routes/
 │   │   │   ├── appRoutes.ts        # /api/app endpoints (sidebar badge metrics)
-│   │   │   ├── authRoutes.ts       # /api/auth endpoints
+│   │   │   ├── authRoutes.ts       # /api/auth endpoints (rate-limited login)
 │   │   │   ├── billingRoutes.ts    # /api/billing endpoints (seat requests & my requests)
 │   │   │   ├── clientRoutes.ts     # /api/clients endpoints
 │   │   │   ├── dashboardRoutes.ts  # /api/dashboard endpoints (stats aggregation)
@@ -251,13 +281,16 @@ CRM/
 │   │   ├── utils/
 │   │   │   ├── emailService.ts     # Nodemailer HTML template and email dispatch
 │   │   │   └── tenantHelper.ts     # Tenant context resolution & validation helper
-│   │   └── server.ts               # Express application entrypoint
+│   │   └── server.ts               # Express application entrypoint with Helmet, RateLimiter & NoSQL sanitize
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── .env.example
 │
 └── frontend/                       # React 19 & Tailwind CSS Client
     ├── src/
+    │   ├── api/
+    │   │   ├── axios.ts            # Configured Axios instance (Vercel -> Render proxy withCredentials)
+    │   │   └── index.ts            # Central API barrel export
     │   ├── components/
     │   │   ├── common/
     │   │   │   ├── Badge.tsx               # Status badges
@@ -347,7 +380,7 @@ cd Elevate-B2B-CRM
    JWT_SECRET=super_secret_jwt_cryptographic_key_here
    JWT_EXPIRES_IN=7d
 
-   # Cloudinary Media Upload (Optional for avatars)
+   # Cloudinary Media Upload (For user profile avatars & manual billing payment receipts)
    CLOUDINARY_CLOUD_NAME=your_cloud_name
    CLOUDINARY_API_KEY=your_cloudinary_api_key
    CLOUDINARY_API_SECRET=your_cloudinary_api_secret
@@ -373,7 +406,13 @@ cd Elevate-B2B-CRM
    npm install
    ```
 
-2. Launch the Vite development server:
+2. (Optional) Configure environment variables in `frontend/.env` if pointing to local backend:
+   ```env
+   # Defaults automatically to live Render backend if omitted:
+   VITE_API_URL=http://localhost:5000
+   ```
+
+3. Launch the Vite development server:
    ```bash
    npm run dev
    ```
@@ -396,11 +435,16 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 
 ## 📡 Core API Reference
 
+### 🏥 Health & System Telemetry (`/api/health`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/health` | Public | Real-time server health and service uptime heartbeat (exempt from rate limit) |
+
 ### 🔐 Authentication (`/api/auth`)
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/auth/register` | Public | Role-based registration (`Company Admin` provisions Tenant; `Employee` creates user) |
-| `POST` | `/api/auth/login` | Public | Authenticate user credentials and return JWT |
+| `POST` | `/api/auth/login` | Public (Rate Limited) | Authenticate user credentials and return JWT (strictly limited to 5 attempts / 15 min per IP) |
 | `POST` | `/api/auth/forgot-password` | Public | Request password recovery reset OTP via email |
 | `POST` | `/api/auth/reset-password` | Public | Reset password using verified recovery OTP |
 
@@ -485,7 +529,7 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | `GET` | `/api/super-admin/dashboard-stats` | Super Admin (`requireSuperAdmin`) | 100% Real-time dynamic metrics (`totalRegisteredCompanies`, `totalActiveCompanies`, `globalPlatformRevenue`) |
 | `GET` | `/api/super-admin/tenants` | Super Admin (`requireSuperAdmin`) | List all registered companies with admin emails, seat usage (`seatsUsed/maxSeats`), live calculated revenue, and status |
 | `PATCH` | `/api/super-admin/tenants/:id/status` | Super Admin (`requireSuperAdmin`) | Toggle or set company status between `Active` and `Suspended` |
-| `DELETE` | `/api/super-admin/tenants/:id` | Super Admin (`requireSuperAdmin`) | Remove a tenant organization from the platform |
+| `DELETE` | `/api/super-admin/tenants/:id` | Super Admin (`requireSuperAdmin`) | Delete tenant with dual ID resolution (custom code or ObjectId) and typed cascading cleanup |
 | `GET` | `/api/super-admin/seat-requests` | Super Admin (`requireSuperAdmin`) | Fetch pending or all customer seat upgrade requests with payment screenshots |
 | `PUT` | `/api/super-admin/assign-seats/:requestId` | Super Admin (`requireSuperAdmin`) | Approve payment proof and dynamically add requested seats to `tenant.maxSeats` |
 | `PUT` | `/api/super-admin/reject-seats/:requestId` | Super Admin (`requireSuperAdmin`) | Reject seat upgrade request with reason |
@@ -509,6 +553,13 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 7. **Self-Deletion Prevention**: Administrators cannot delete or detach their own active workspace account from the team governance interface.
 8. **Record-Level Ownership Enforcement**: Schemas for `Lead`, `Client`, and `Invoice` require a `createdBy` reference to `User`. Company Admins can edit or delete any record in their workspace, while standard Employees can only modify or delete records they personally created (or are assigned to), returning `403 Forbidden` if unauthorized.
 9. **Universal Deletion Confirmation**: Every destructive delete operation across Leads, Clients, and Invoices is protected by a modal confirmation dialog to prevent accidental data loss.
+10. **HTTP Security Header Protection (`helmet`)**: Express requests are guarded by Helmet, setting secure HTTP headers with Cross-Origin Resource Policy (`cross-origin`) to mitigate clickjacking, MIME sniffing, and cross-site scripting (XSS).
+11. **NoSQL Query Injection Prevention (`express-mongo-sanitize`)**: Body and query inputs (`req.body`, `req.query`, `req.params`) are strictly sanitized to strip forbidden MongoDB query operators (`$` and `.`), preventing unauthenticated database manipulation.
+12. **Dual-Tier Dynamic Rate Limiting (`express-rate-limit`)**:
+    - **Authentication Guard**: Max 5 attempts per 15 minutes on `POST /api/auth/login` to prevent credential stuffing and brute-force attacks.
+    - **General API Defense**: Max 100 requests per 15 minutes across all `/api/*` endpoints to eliminate API abuse and denial-of-service threats.
+13. **Reverse Proxy Trust Verification**: Configured `app.set('trust proxy', 1)` enables accurate client IP identification through Render, AWS, and Nginx reverse proxies.
+14. **Persistent Cloudinary Audit Storage**: Financial receipts and payment verification screenshots are streamed directly to Cloudinary (`crm_billing`), guaranteeing zero data loss across ephemeral cloud container lifecycles.
 
 ---
 
