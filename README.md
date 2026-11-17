@@ -202,7 +202,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **NoSQL Query Injection Sanitization (`express-mongo-sanitize`)**: Mounted immediately after `express.json()` and `express.urlencoded()` body parsers. Proactively sanitizes `req.body`, `req.query`, and `req.params` by stripping any prohibited characters (such as `$` and `.`), preventing MongoDB operator injection attacks like `{"$gt": ""}`.
 - **Cross-Site Scripting (XSS) Sanitization (`xss-clean`)**: Applied globally immediately following body parsers and NoSQL sanitizers. Cleans and purges any malicious HTML tags, JavaScript payloads, or executable script injections embedded within incoming `req.body`, `req.query`, and `req.params`, guarding database persistence and downstream renders against stored and reflected XSS.
 - **Strict Cross-Origin Resource Sharing (CORS)**: Dynamically verifies origins across production (`https://elevate-b2-b-crm.vercel.app`), local development ports (`http://localhost:5173`, `http://localhost:5174`, `http://localhost:3000`, and `127.0.0.1`), and Vercel preview deployments, configuring `credentials: true` for secure cookies and headers (`Authorization`, `Content-Type`, `X-Requested-With`, `Accept`, `Origin`).
-- **Real-Time Visual Terminal Logger**: Custom development and production telemetry middleware in `server.ts` logging every incoming API request with method, endpoint, ANSI color-coded status codes (Green for 2xx, Cyan for 3xx, Yellow for 4xx, Red for 5xx), and execution duration in milliseconds.
+- **Clean Production Logging & Telemetry**: Debugging statements (`console.log`, `console.info`, `console.dir`) are purged across controllers and services. Visual colored HTTP request/status logging in `server.ts` is strictly guarded by `if (process.env.NODE_ENV !== 'production')`, preventing cloud stdout saturation and memory bloat while preserving critical initialization diagnostics (`[Server Ready]`, `[MongoDB Connected]`) and centralized `console.error` inside catch blocks.
 
 ### 🔐 18. Short Access Token (15m) & Long Refresh Token (7d) Architecture
 - **Short-Lived Access Token (15m)**: Generated upon login and registration, signed with `JWT_SECRET`, and carrying user identity, active role, and tenant context. Short lifespan limits exposure in the event of client-side leakage.
@@ -225,6 +225,16 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
   - On success, updates `localStorage`, `axios.defaults.headers.common['Authorization']`, and replays all queued requests seamlessly without user awareness or page reload.
   - If the refresh token is also expired or revoked, clears session storage and safely redirects the user to `/login`.
 - **Session Termination (`POST /api/auth/logout`)**: Clears both `accessToken` and `refreshToken` cookies from the browser with matching domain and security flags, removes the `refreshToken` from the user's MongoDB record, and deletes local client tokens.
+
+### 🛡️ 19. Strict Backend Input Validation with Zod
+- **Generic Validation Middleware (`validateResource`)**: Positioned on critical API endpoints, it validates `req.body`, `req.query`, and `req.params` against strict Zod schemas before requests reach controllers.
+- **Structured Error Responses (400 Bad Request)**: When validation fails, returns a clear top-level message alongside an itemized `errors` array (`field`, `message`, `code`), giving frontend forms and toasts immediate actionable validation feedback.
+- **Authentication Schemas (`auth.schema.ts` / `user.schema.ts`)**:
+  - `registerSchema`: Strictly enforces min 2 char names, valid lowercase email format, and **minimum 8 characters** for passwords.
+  - `loginSchema`: Validates email format and ensures password is provided.
+- **Leads Pipeline Schemas (`lead.schema.ts`)**:
+  - `createLeadSchema`: Enforces required contact name (`contactName` / `name`), company name (`companyName` / `company`), valid email format, and non-negative `estimatedValue`.
+  - `updateLeadSchema`: Supports both partial stage updates (Kanban drag-and-drop) and full opportunity edits while maintaining schema validity.
 
 ---
 
@@ -529,8 +539,8 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/leads` | Private | Fetch paginated leads for current tenant (`?page=1&limit=10`) |
-| `POST` | `/api/leads` | Private | Create a new lead opportunity with dynamically resolved assigned sales rep and country |
-| `PUT` | `/api/leads/:id` | Private | Update lead details, country, or stage (auto-converts to Client upon 'Won / Closed') |
+| `POST` | `/api/leads` | Private | Create a new lead opportunity (Strictly validated by Zod `createLeadSchema`) |
+| `PUT` | `/api/leads/:id` | Private | Update lead details or stage (Validated by Zod `updateLeadSchema`; auto-converts to Client upon 'Won / Closed') |
 | `DELETE` | `/api/leads/:id` | Private | Delete a lead with strict tenant verification (guarded by `ConfirmDeleteModal`) |
 
 ### 💼 Clients (`/api/clients`)
@@ -603,9 +613,10 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 16. **HttpOnly & SameSite Cookie Transport**: Transports authentication tokens via secure HttpOnly cookies (`accessToken` and `refreshToken`), shielding credentials from malicious client-side JavaScript (XSS) extraction.
 17. **Dual-Layer Authentication Resilience**: Backend `protect` middleware accepts either HttpOnly cookies or `Authorization: Bearer <token>` fallback headers, guaranteeing 100% operational resilience across cross-domain environments and restrictive browser third-party cookie policies.
 18. **Concurrency-Safe Silent Token Refresh**: Axios response interceptors catch 401s, queue outbound requests, silently request new tokens via `/api/auth/refresh`, and transparently replay failed requests without interrupting user workflow.
-19. **Real-Time Request & Status Telemetry**: High-visibility terminal logger in `server.ts` outputs ANSI color-coded HTTP methods, routes, status codes, and latency in milliseconds for every API invocation.
+19. **Environment-Gated Telemetry & Clean Production Logging**: HTTP request logging is strictly isolated to development environments (`NODE_ENV !== 'production'`), with all debugging `console.log` statements purged from controllers and services to guarantee clean logs and eliminate cloud container memory bloat.
 20. **Strict Schema-Based Request Validation (`Zod` + `validateResource`)**: Inbound payload contracts are strictly validated at the routing perimeter before hitting controller logic. Rejects malformed bodies, missing required parameters, or invalid email/password formats with `400 Bad Request` and structured error responses.
 21. **Cross-Site Scripting (XSS) Input Sanitization (`xss-clean`)**: All inbound data across `req.body`, `req.query`, and `req.params` is automatically filtered to strip hostile HTML and JavaScript executable scripts, neutralizing stored and reflected XSS attempts at the gateway.
+22. **Zero-Trust Error Boundary Management**: All unexpected exceptions are safely routed through centralized error middleware and catch blocks with structured `console.error` diagnostics, keeping server infrastructure details and stack traces hidden from client responses.
 
 ---
 
