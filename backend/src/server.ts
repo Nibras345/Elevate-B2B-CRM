@@ -4,7 +4,6 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
-import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -60,41 +59,43 @@ if (CLIENT_URL && !allowedOrigins.includes(CLIENT_URL)) {
 // Connect to MongoDB Database
 await connectDB();
 
-// Real-time API Request & Status Logger in Terminal
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const startTime = Date.now();
-  const { method, originalUrl } = req;
+// Real-time API Request & Status Logger in Terminal (Development Only to prevent production log bloat)
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const startTime = Date.now();
+    const { method, originalUrl } = req;
 
-  res.on('finish', () => {
-    const duration = Date.now() - startTime;
-    const statusCode = res.statusCode;
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      const statusCode = res.statusCode;
 
-    // Terminal ANSI Colors
-    const reset = '\x1b[0m';
-    const bold = '\x1b[1m';
-    const methodColor = '\x1b[35m'; // Magenta
+      // Terminal ANSI Colors
+      const reset = '\x1b[0m';
+      const bold = '\x1b[1m';
+      const methodColor = '\x1b[35m'; // Magenta
 
-    let statusColor = '\x1b[32m'; // Green (2xx)
-    let icon = '✅';
+      let statusColor = '\x1b[32m'; // Green (2xx)
+      let icon = '✅';
 
-    if (statusCode >= 500) {
-      statusColor = '\x1b[31m'; // Red (5xx)
-      icon = '❌';
-    } else if (statusCode >= 400) {
-      statusColor = '\x1b[33m'; // Yellow (4xx)
-      icon = '⚠️';
-    } else if (statusCode >= 300) {
-      statusColor = '\x1b[36m'; // Cyan (3xx)
-      icon = '🔄';
-    }
+      if (statusCode >= 500) {
+        statusColor = '\x1b[31m'; // Red (5xx)
+        icon = '❌';
+      } else if (statusCode >= 400) {
+        statusColor = '\x1b[33m'; // Yellow (4xx)
+        icon = '⚠️';
+      } else if (statusCode >= 300) {
+        statusColor = '\x1b[36m'; // Cyan (3xx)
+        icon = '🔄';
+      }
 
-    console.log(
-      `${icon} ${bold}[API]${reset} ${methodColor}${method}${reset} ${originalUrl} -> ${statusColor}${statusCode}${reset} (${duration}ms)`
-    );
+      console.log(
+        `${icon} ${bold}[API]${reset} ${methodColor}${method}${reset} ${originalUrl} -> ${statusColor}${statusCode}${reset} (${duration}ms)`
+      );
+    });
+
+    next();
   });
-
-  next();
-});
+}
 
 // Middleware
 app.use(

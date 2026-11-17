@@ -383,7 +383,6 @@ export const updateLead = async (
         await newClient.save();
         autoConvertedClient = newClient;
         conversionMessage = `Deal won! ${updatedLead.companyName} has been automatically converted to your Clients database.`;
-        console.log(`[Auto-Convert Success]: New client created with ID ${newClient._id} for lead ${updatedLead._id}`);
       } catch (error) {
         console.error("Client Creation Failed:", error);
       }

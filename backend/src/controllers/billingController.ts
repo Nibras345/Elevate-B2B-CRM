@@ -121,7 +121,7 @@ export const requestSeats = async (
         read: false,
       });
     } catch (notifErr) {
-      console.warn('Failed to record notification for seat request:', notifErr);
+      console.error('Failed to record notification for seat request:', notifErr);
     }
 
     res.status(201).json({
@@ -275,7 +275,7 @@ export const assignSeats = async (
         read: false,
       });
     } catch (notifErr) {
-      console.warn('Failed to dispatch notification on seat approval:', notifErr);
+      console.error('Failed to dispatch notification on seat approval:', notifErr);
     }
 
     res.status(200).json({
@@ -345,7 +345,7 @@ export const rejectSeats = async (
           read: false,
         });
       } catch (notifErr) {
-        console.warn('Notification failed on seat rejection:', notifErr);
+        console.error('Notification failed on seat rejection:', notifErr);
       }
     }
 
