@@ -195,10 +195,10 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 
 ### 🛡️ 17. Production Security Hardening & Zero-Trust Defense
 - **HTTP Security Headers (`helmet`)**: Configured at the top of Express middleware pipeline with Cross-Origin Resource Policy (`cross-origin`), hardening the API against clickjacking, cross-site scripting (XSS), MIME type sniffing, and insecure transport vulnerabilities.
-- **Reverse Proxy IP Trust (`app.set('trust proxy', 1)`)**: Configured globally in `server.ts` to accurately resolve genuine client IP addresses through Render, AWS, or Nginx load balancers and reverse proxies, ensuring rate limiters identify individual bad actors without penalizing shared proxy IPs.
+- **Reverse Proxy IP Trust (`app.set('trust proxy', 1)`)**: Configured globally at the very top of `server.ts` immediately after `const app = express()` before any middleware or route mounts. This ensures Express trusts upstream reverse proxy headers (`X-Forwarded-For`) from cloud platforms (Render, AWS, Nginx), enabling rate limiters and loggers to resolve genuine client IP addresses without penalizing shared proxy IPs.
 - **Dual-Tier Dynamic Rate Limiting (`express-rate-limit`)**:
-  - **Auth Rate Limiter (`authLimiter`)**: Strictly limits failed login attempts to **5 attempts per 15 minutes** per IP address in production, responding with `429 Too Many Requests` (`"Too many login attempts from this IP, please try again after 15 minutes."`) with standard RFC headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`). Employs `skipSuccessfulRequests: true` so valid authentications never consume the limit, completely neutralizing brute-force credential stuffing.
-  - **General API Limiter (`generalLimiter`)**: Enforces a threshold of **100 requests per 15 minutes** per IP across all `/api/*` endpoints (relaxed in development), preventing Distributed Denial of Service (DDoS) and API spam. The `/api/health` heartbeat route and CORS preflight `OPTIONS` requests are explicitly exempt.
+  - **Auth Rate Limiter (`authLimiter`)**: Strictly limits failed login attempts to **5 attempts per 15 minutes** per IP address unconditionally across all environments (both local development and production). Configured with `skipSuccessfulRequests: true` so authenticated users are never penalized, and responds with HTTP `429 Too Many Requests` (`"Too many login attempts from this IP, please try again after 15 minutes."`) alongside standard RFC headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`). Explicitly injected on the login route: `router.post('/login', authLimiter, validateResource(loginSchema), login);` in `src/routes/authRoutes.ts`.
+  - **General API Limiter (`generalLimiter`)**: Enforces a threshold of **100 requests per 15 minutes** per IP across all `/api/*` endpoints (relaxed to 1,000 in development), preventing Distributed Denial of Service (DDoS) and API spam. The `/api/health` heartbeat route and CORS preflight `OPTIONS` requests are explicitly exempt via `skip: (req) => req.method === 'OPTIONS'`.
 - **NoSQL Query Injection Sanitization (`express-mongo-sanitize`)**: Mounted immediately after `express.json()` and `express.urlencoded()` body parsers. Proactively sanitizes `req.body`, `req.query`, and `req.params` by stripping any prohibited characters (such as `$` and `.`), preventing MongoDB operator injection attacks like `{"$gt": ""}`.
 - **Cross-Site Scripting (XSS) Sanitization (`xss-clean`)**: Applied globally immediately following body parsers and NoSQL sanitizers. Cleans and purges any malicious HTML tags, JavaScript payloads, or executable script injections embedded within incoming `req.body`, `req.query`, and `req.params`, guarding database persistence and downstream renders against stored and reflected XSS.
 - **Strict Cross-Origin Resource Sharing (CORS)**: Dynamically verifies origins across production (`https://elevate-b2-b-crm.vercel.app`), local development ports (`http://localhost:5173`, `http://localhost:5174`, `http://localhost:3000`, and `127.0.0.1`), and Vercel preview deployments, configuring `credentials: true` for secure cookies and headers (`Authorization`, `Content-Type`, `X-Requested-With`, `Accept`, `Origin`).
@@ -235,6 +235,10 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 - **Leads Pipeline Schemas (`lead.schema.ts`)**:
   - `createLeadSchema`: Enforces required contact name (`contactName` / `name`), company name (`companyName` / `company`), valid email format, and non-negative `estimatedValue`.
   - `updateLeadSchema`: Supports both partial stage updates (Kanban drag-and-drop) and full opportunity edits while maintaining schema validity.
+- **Route Applications & Defensive Chaining**:
+  - `POST /api/auth/register`: Guarded by `validateResource(registerSchema)` to ensure registration integrity before user provisioning.
+  - `POST /api/auth/login`: Chained sequentially with `authLimiter` followed by `validateResource(loginSchema)` (`router.post('/login', authLimiter, validateResource(loginSchema), login)`), neutralizing both brute-force attacks and malformed credential submissions.
+  - `POST /api/leads` & `PUT /api/leads/:id`: Enforced via `validateResource(createLeadSchema)` and `validateResource(updateLeadSchema)`.
 
 ---
 
@@ -255,7 +259,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 | **Cookie Management**| **cookie-parser** | HttpOnly, Secure, SameSite cross-domain cookie parsing and delivery |
 | **Input Validation** | **Zod 4** | Strict type-safe schema validation middleware for API requests (`body`, `query`, `params`) |
 | **Security & Hardening** | **Helmet, Mongo-Sanitize & xss-clean** | HTTP security headers, NoSQL query sanitizer, XSS data cleaner, and reverse proxy trust |
-| **Rate Limiting** | **express-rate-limit** | Brute-force auth limiter (5 req/15m) and general API limiter (100 req/15m) |
+| **Rate Limiting** | **express-rate-limit** | Brute-force auth limiter (5 failed attempts/15m with skipSuccessfulRequests & 429 response) and general API limiter (100 req/15m) |
 | **Telemetry & Logs** | **Custom Terminal Logger** | Real-time ANSI colored HTTP request, status code, and latency telemetry |
 | **File Storage** | **Multer & Cloudinary** | Cloud CDN media for avatars (`crm_avatars`) and billing proofs (`crm_billing`) |
 | **Email Service** | **Nodemailer** | SMTP transporter for invitations and recovery codes |
@@ -494,7 +498,7 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/auth/register` | Public | Role-based registration (`Company Admin` provisions Tenant; `Employee` creates user), sets HttpOnly tokens |
-| `POST` | `/api/auth/login` | Public (Rate Limited) | Authenticate credentials; issues 15m Access Token & 7d Refresh Token in HttpOnly cookies + JSON (max 5 failed attempts / 15m) |
+| `POST` | `/api/auth/login` | Public (Rate Limited) | Authenticate credentials; issues 15m Access Token & 7d Refresh Token in HttpOnly cookies + JSON (guarded by authLimiter: max 5 failed attempts / 15m across all envs, 429 Too Many Requests; Zod validated by loginSchema) |
 | `POST` | `/api/auth/refresh` | Public | Generate fresh 15m Access Token using verified 7d Refresh Token (from HttpOnly cookie or body fallback) |
 | `POST` | `/api/auth/logout` | Public | End session, clear HttpOnly cookies, and revoke refresh token in MongoDB |
 | `GET` | `/api/auth/me` | Private | Verify authentication and fetch current user profile and workspace tenant context |
@@ -609,9 +613,9 @@ To access the platform-wide Super Admin Console at `http://localhost:5173/super-
 10. **HTTP Security Header Protection (`helmet`)**: Express requests are guarded by Helmet, setting secure HTTP headers with Cross-Origin Resource Policy (`cross-origin`) to mitigate clickjacking, MIME sniffing, and cross-site scripting (XSS).
 11. **NoSQL Query Injection Prevention (`express-mongo-sanitize`)**: Body and query inputs (`req.body`, `req.query`, `req.params`) are strictly sanitized to strip forbidden MongoDB query operators (`$` and `.`), preventing unauthenticated database manipulation.
 12. **Dual-Tier Dynamic Rate Limiting (`express-rate-limit`)**:
-    - **Authentication Guard**: Max 5 attempts per 15 minutes on `POST /api/auth/login` to prevent credential stuffing and brute-force attacks.
-    - **General API Defense**: Max 100 requests per 15 minutes across all `/api/*` endpoints to eliminate API abuse and denial-of-service threats.
-13. **Reverse Proxy Trust Verification**: Configured `app.set('trust proxy', 1)` enables accurate client IP identification through Render, AWS, and Nginx reverse proxies.
+    - **Authentication Guard (`authLimiter`)**: Strictly limits failed login attempts to **5 attempts per 15 minutes** per IP address across all environments (both local development and production) with `skipSuccessfulRequests: true`, responding with `429 Too Many Requests` (`"Too many login attempts from this IP, please try again after 15 minutes."`) and standard RFC rate-limit headers to prevent brute-force attacks and credential stuffing without penalizing valid logins.
+    - **General API Defense (`generalLimiter`)**: Enforces a threshold of max 100 requests per 15 minutes across all `/api/*` endpoints (relaxed to 1,000 in development) to eliminate API abuse and denial-of-service threats, while bypassing preflight `OPTIONS` and `/api/health`.
+13. **Reverse Proxy Trust Verification (`app.set('trust proxy', 1)`)**: Configured globally at the very top of `server.ts` immediately after `const app = express()` before any middleware or route definitions, ensuring Express accurately trusts upstream proxy headers (`X-Forwarded-For`) from Render, AWS, and Nginx for client IP resolution in rate limiters and audit logging.
 14. **Persistent Cloudinary Audit Storage**: Financial receipts and payment verification screenshots are streamed directly to Cloudinary (`crm_billing`), guaranteeing zero data loss across ephemeral cloud container lifecycles.
 15. **Short-Lived Access & Long Refresh Token Lifecycle**: Issues 15-minute Access Tokens and 7-day Refresh Tokens. Refresh tokens are persisted to MongoDB (`User.refreshToken`), enabling instant server-side session revocation on logout or role updates.
 16. **HttpOnly & SameSite Cookie Transport**: Transports authentication tokens via secure HttpOnly cookies (`accessToken` and `refreshToken`), shielding credentials from malicious client-side JavaScript (XSS) extraction.
