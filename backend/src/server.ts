@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import mongoSanitize from 'express-mongo-sanitize';
+import xss from 'xss-clean';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -124,6 +125,9 @@ app.use(cookieParser());
 
 // Data Sanitization against NoSQL Query Injection (removes $ and dot characters from body, params, query)
 app.use(mongoSanitize());
+
+// Data Sanitization against Cross-Site Scripting (XSS) attacks (sanitizes user input in body, params, query)
+app.use(xss());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
