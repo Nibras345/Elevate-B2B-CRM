@@ -259,7 +259,7 @@ An enterprise-grade, multi-tenant B2B SaaS Customer Relationship Management (CRM
 | **Telemetry & Logs** | **Custom Terminal Logger** | Real-time ANSI colored HTTP request, status code, and latency telemetry |
 | **File Storage** | **Multer & Cloudinary** | Cloud CDN media for avatars (`crm_avatars`) and billing proofs (`crm_billing`) |
 | **Email Service** | **Nodemailer** | SMTP transporter for invitations and recovery codes |
-| **Production Hosting** | **Vercel & Render** | Frontend on Vercel Edge; Backend on Render Web Service; DB on MongoDB Atlas |
+| **Production Hosting** | **Vercel & Render** | Frontend on Vercel Edge (`vercel.json` SPA rewrites); Backend on Render Web Service; DB on MongoDB Atlas |
 
 ---
 
@@ -376,6 +376,7 @@ CRM/
     ├── package.json
     ├── tailwind.config.js
     ├── tsconfig.json
+    ├── vercel.json                 # Vercel SPA routing rewrites (prevents 404 on page reload)
     └── vite.config.ts
 ```
 
@@ -463,6 +464,9 @@ cd Elevate-B2B-CRM
    npm run dev
    ```
    *The frontend client will be available at `http://localhost:5173`.*
+
+4. **Production Vercel SPA Routing Configuration**:
+   The frontend includes `vercel.json` with an SPA rewrite rule (`"source": "/(.*)", "destination": "/index.html"`), ensuring direct URL entries or browser page refreshes on sub-routes (`/dashboard`, `/leads`, `/clients`, `/settings`, `/super-admin`) are seamlessly handled by React Router without encountering 404 errors.
 
 ---
 
