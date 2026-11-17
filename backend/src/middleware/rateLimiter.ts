@@ -4,14 +4,15 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 /**
  * Strict Rate Limiter for Authentication / Login Routes
- * Prevents brute force credential attacks by restricting failed attempts per IP.
+ * Prevents brute force credential attacks by strictly capping failed attempts to 5 per 15 minutes.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 50 : 5, // Generous in development, strict in production
-  skipSuccessfulRequests: true, // Only count failed logins towards rate limiting
+  max: 5, // Strictly limit each IP to 5 failed login attempts per 15-minute window
+  skipSuccessfulRequests: true, // Only failed logins count against the 5-attempt limit
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  statusCode: 429,
   message: {
     success: false,
     message: 'Too many login attempts from this IP, please try again after 15 minutes.',
